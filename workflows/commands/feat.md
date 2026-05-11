@@ -58,7 +58,7 @@ After the last Stop, execution is autonomous through merge. The user may interru
 - Doc body rules → `documentation-criteria`
 - Code quality → `coding-principles`
 - Test rules → `testing-principles`
-- Stack specifics → `stack-kotlin-spring/*` and `stack-nextjs/*` skills
+- Stack specifics → `stacks/kotlin-spring/*` and `stacks/nextjs/*` skills
 
 ## Expected output
 

@@ -1,7 +1,7 @@
 {
   "name": "stack-nextjs",
   "description": "Next.js stack pack — frontend coding rules, data fetching patterns, testing skills, stop-verification hook",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": {
     "name": "sideholic",
     "url": "https://github.com/sideholic"

@@ -59,8 +59,8 @@ config.yml            ← /setup-team 출력 (codex verified_at 등)
 | PRD / Design / ADR / Diagnose 본문 규약 | `documentation-criteria` |
 | 코드 품질 (스택 무관) | `coding-principles` |
 | 테스트 규칙 (스택 무관) | `testing-principles` |
-| Kotlin/Spring 스택 | `stack-kotlin-spring/skills/*` (kotlin-spring-boot-core, data-access, testing-kotlin) |
-| Next.js 스택 | `stack-nextjs/skills/*` (nextjs-core, frontend-data, testing-nextjs) |
+| Kotlin/Spring 스택 | `stacks/kotlin-spring/skills/*` (kotlin-spring-boot-core, data-access, testing-kotlin) |
+| Next.js 스택 | `stacks/nextjs/skills/*` (nextjs-core, frontend-data, testing-nextjs) |
 
 ## 슬래시 커맨드 12개
 

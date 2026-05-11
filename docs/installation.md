@@ -122,11 +122,11 @@ hooks 를 수동 등록하려면 아래 설정을 `.claude/settings.local.json` 
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/stack-kotlin-spring/hooks/stop-verification.sh"
+            "command": "$CLAUDE_PROJECT_DIR/stacks/kotlin-spring/hooks/stop-verification.sh"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/stack-nextjs/hooks/stop-verification.sh"
+            "command": "$CLAUDE_PROJECT_DIR/stacks/nextjs/hooks/stop-verification.sh"
           }
         ]
       }
