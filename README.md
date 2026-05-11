@@ -2,7 +2,7 @@
 
 > Claude Code 를 **회사처럼 굴러가는 7인 페르소나 팀** 으로 운영하는 마켓플레이스 플러그인.
 
-요청을 받으면 Tech Lead 가 복잡도(small/medium/large)를 판정해 작업을 잘게 나누고, tmux 페인에서 병렬로 도는 백그라운드 `claude` 워커들에게 분배한다. 모든 PR 은 `codex` 의 어드버서리얼 리뷰를 통과해야 머지된다 — 작은 변경(`small`)도 예외 없음.
+요청을 받으면 Tech Lead 가 복잡도(small/medium/large)를 판정한다. 작업을 잘게 쪼개 tmux 페인의 백그라운드 `claude` 워커들에게 분배하고, 모든 PR 은 `codex` 어드버서리얼 리뷰를 통과해야 머지된다 — 작은 변경(`small`)도 예외 없음.
 
 ```
 ┌────────────────────┬────────────────────┐
@@ -16,6 +16,40 @@
 └────────────────────┴────────────────────┘
 ```
 
+## 요구사항
+
+| 항목 | 버전·설명 |
+|---|---|
+| **Claude Code** | 최신 (CLI / 웹 / VS Code 중 하나) |
+| **tmux** | ≥ 3.2 (페인 타이틀 지원) |
+| **codex CLI** | 필수 의존성 — `/codex:setup` 이 설치·인증까지 안내 |
+| **shell** | bash 3.2+ / zsh — macOS 기본 bash 호환 |
+| (백엔드 스택만) | JDK + Gradle (버전은 프로젝트 따라감) |
+| (프론트 스택만) | Node ≥ 20.11 + pnpm 9+ (`corepack enable pnpm`) |
+
+## 설치
+
+```bash
+/plugin marketplace add sideholic/personal-claude-code
+/plugin install workflows@personal-claude-code
+
+# 스택은 프로젝트에 맞춰 골라 깐다 (둘 다 깔아도 됨)
+/plugin install stack-kotlin-spring@personal-claude-code
+/plugin install stack-nextjs@personal-claude-code
+```
+
+## 첫 실행
+
+```bash
+/codex:setup       # codex CLI 인증 (openai/codex-plugin-cc, 한 번만)
+/setup-team        # claude-team tmux 세션 + 페인 5개 + .claude-team/ 디렉터리 셋업
+/feat <요청>        # 전체 11 단계 라이프사이클
+# 또는
+/task <요청>        # 작은 작업 (1–2 파일, 단일 영역)
+```
+
+`/setup-team` 은 `claude-team` 이라는 새 tmux 세션에 페인 5 개를 만들고 각 워커에 백그라운드 `claude` 를 띄운다. 다른 터미널에서 `tmux attach -t claude-team` 으로 진행 상황 확인 가능.
+
 ## 어떻게 작동하나
 
 ```
@@ -25,7 +59,7 @@ Technoking (main 페인, Tech Lead)
     ├─ 복잡도 판정 (small / medium / large)
     ├─ Spec Shaman → PRD 작성 (medium·large 만)
     ├─ Galaxy Brain → 설계 문서 + ADR (medium·large 만)
-    ├─ 작업 분해 → ticket 으로 발행
+    ├─ 작업 분해 → ticket 발행
     │
     ▼ 워커 페인들이 폴링으로 ticket 픽업
 Paladin (worker-be) · Wizard (worker-fe) · Witch (worker-qa)
@@ -40,7 +74,7 @@ Roastmaster (worker-review, 코드 리뷰어)
 Technoking → 머지 → 보고
 ```
 
-워커들은 서로 직접 통신하지 않는다. **모든 조율은 `.claude-team/` 디렉터리의 파일**(ticket / inbox / review report) 로만 이뤄진다. 데이터 모델 전체는 [`workflows/skills/ticket-protocol/SKILL.md`](workflows/skills/ticket-protocol/SKILL.md).
+워커들은 서로 직접 통신하지 않는다. **모든 조율은 `.claude-team/` 디렉터리의 파일** (ticket · inbox · review report) 로만 이뤄진다. 데이터 모델 전체는 [`workflows/skills/ticket-protocol/SKILL.md`](workflows/skills/ticket-protocol/SKILL.md).
 
 ## 디렉터리 구조
 
@@ -49,8 +83,8 @@ personal-claude-code/
 ├── .claude-plugin/marketplace.json   # 마켓플레이스 매니페스트
 ├── workflows/                        # 코어 플러그인 (필수)
 │   ├── agents/                       # 7 페르소나 정의
-│   ├── skills/                       # 스택 무관 스킬 8개
-│   ├── commands/                     # 슬래시 커맨드 12개
+│   ├── skills/                       # 스택 무관 스킬 8 개
+│   ├── commands/                     # 슬래시 커맨드 12 개
 │   ├── bin/                          # tmux / ticket 셸 스크립트
 │   └── hooks/                        # 안전 가드 (위험 명령 차단)
 ├── stacks/                           # 스택별 플러그인 (옵션)
@@ -105,29 +139,6 @@ stacks/<name>/
 
 `stacks/kotlin-spring/` 또는 `stacks/nextjs/` 를 복사해 출발점으로 삼는 게 가장 빠르다. 마켓플레이스의 `marketplace.json` 에 plugin entry 를 추가한 뒤 `/plugin install` 로 사용.
 
-## 설치
-
-```bash
-/plugin marketplace add sideholic/personal-claude-code
-/plugin install workflows@personal-claude-code
-
-# 스택 사용 시 골라 설치 (둘 다 깔아도 됨)
-/plugin install stack-kotlin-spring@personal-claude-code
-/plugin install stack-nextjs@personal-claude-code
-```
-
-## 첫 실행
-
-```bash
-/codex:setup       # codex CLI 인증 (필수 의존성, openai/codex-plugin-cc)
-/setup-team        # claude-team tmux 세션 + 페인 5개 + .claude-team/ 디렉터리 셋업
-/feat <요청>        # 전체 11 단계 라이프사이클
-# 또는
-/task <요청>        # 작은 작업 (1–2 파일, 단일 영역)
-```
-
-`/setup-team` 은 `claude-team` 이라는 새 tmux 세션에 페인 5 개를 만들고 각 워커에 백그라운드 `claude` 를 띄운다. 다른 터미널에서 `tmux attach -t claude-team` 으로 진행 상황 확인.
-
 ## 7 인 팀
 
 | 이름 | 직책 | 모델 | 페인 |
@@ -176,25 +187,10 @@ stacks/<name>/
 - **codex 는 필수 의존성** — `/codex:status` 가 ready 가 아니면 어떤 ticket 도 진행 안 됨. 약화된 모드 없음.
 - **품질 게이트는 모든 변경에 동일하게 적용** — 작은 `/task` 도 codex 리뷰 + 자동 rescue 게이트 통과 의무.
 - **자동 rescue** — 같은 에러가 2 번 반복되거나 같은 BLOCKING 이 2 라운드 이어지면 사용자 승인 없이 codex 에 위임해 패치를 받아온다.
-- **승인 절차 (Stop)**:
-  - `small`: 승인 단계 없음. Technoking 자율 진행.
-  - `medium`: 1 회 — PRD + 설계를 묶어 한 번 확인.
-  - `large`: 3 회 — PRD, 설계, 작업 batch 각각 확인.
-  - 머지 직전 추가 확인은 없음 (앞에서 승인 받았으므로).
-- **언어 정책** — 사용자가 직접 읽는 문서(PRD, 설계, ADR, commit 본문, PR 본문, 리뷰 보고서) 는 **한국어**. 페르소나 정의 · 스킬 · 코드 · conventional commit prefix · YAML key 는 **영어**.
+- **승인 절차 (Stop)** — `small` = 0 회 (자율 진행) / `medium` = 1 회 (PRD+설계 통합 확인) / `large` = 3 회 (PRD · 설계 · 작업 batch 각각). 머지 직전 추가 확인은 없음.
+- **언어 정책** — 사용자가 직접 읽는 문서(PRD · 설계 · ADR · commit 본문 · PR 본문 · 리뷰 보고서) 는 **한국어**. 페르소나 정의 · 스킬 · 코드 · conventional commit prefix · YAML key 는 **영어**.
 
 자세한 정책: [`CLAUDE.md`](CLAUDE.md).
-
-## 요구사항
-
-| 항목 | 버전·설명 |
-|---|---|
-| Claude Code | 최신 (CLI / 웹 / VS Code 중 하나) |
-| tmux | ≥ 3.2 (페인 타이틀 지원) |
-| codex CLI | `/codex:setup` 이 설치·인증까지 안내 |
-| shell | bash 3.2+ / zsh — macOS 기본 bash 호환 |
-| (백엔드 스택만) | JDK + Gradle (버전은 프로젝트 따라감) |
-| (프론트 스택만) | Node ≥ 20.11 + pnpm 9+ (`corepack enable pnpm`) |
 
 ## 더 알아보기
 
