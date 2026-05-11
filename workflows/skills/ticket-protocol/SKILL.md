@@ -175,16 +175,16 @@ created: 2026-05-11T14:35:00+09:00
 ```
 
 `kind` semantics:
-- `directive` — Technoking → worker mid-ticket pivot; targeted worker checks at every poll.
-- `review_request` — Technoking → worker-review: ad-hoc review request (reserve; standard path is a queue ticket).
-- `review_complete` — worker-review → Technoking: verdict delivered (payload: `verdict: APPROVE|COMMENT|BLOCKING`, `report_path`).
-- `pattern_stuck` — worker-review → Technoking: same BLOCKING repeated; triggers auto-rescue (payload: `blocking_signature`, `rev_count`).
-- `fix_pushed` — worker → Technoking: BLOCKING fix pushed (payload: `branch`, `last_sha`). Technoking issues round+1 `RV-NNNN`.
-- `needs_reblock` — worker → Technoking: COMMENT finding escalated to BLOCKING; reason attached.
+- `directive` — Technoking → worker mid-ticket pivot; targeted worker checks every poll.
+- `review_request` — Technoking → worker-review ad-hoc review (reserve; standard path is a queue ticket).
+- `review_complete` — worker-review → Technoking verdict delivered (payload: `verdict: APPROVE|COMMENT|BLOCKING`, `report_path`).
+- `pattern_stuck` — worker-review → Technoking same BLOCKING repeated; triggers auto-rescue (payload: `blocking_signature`, `rev_count`).
+- `fix_pushed` — worker → Technoking BLOCKING fix pushed (payload: `branch`, `last_sha`); Technoking issues round+1 `RV-NNNN`.
+- `needs_reblock` — worker → Technoking COMMENT finding escalated to BLOCKING; reason attached.
 
 ### 6. Backlog (`type: backlog`)
 
-Out-of-scope item discovered during work; filed by anyone, processed by Technoking during planning.
+Out-of-scope item discovered during work; filed by anyone, processed by Technoking at planning.
 
 ```yaml
 ---
@@ -202,7 +202,7 @@ created: 2026-05-11T15:00:00+09:00
 
 ### 7. Handoff (`type: handoff`)
 
-`/handoff` serialization for next session; body = free-form session summary, decisions, blockers, recommended first action on resume.
+`/handoff` serialization; body = session summary, decisions, blockers, recommended first action on resume.
 
 ```yaml
 ---
@@ -218,39 +218,32 @@ created: 2026-05-11T18:00:00+09:00
 
 ## State transitions
 
-### Work ticket
-
+**Work ticket**:
 ```
 queued → in_progress → in_review → done
                 ↘  cancelled (any time)
 ```
-
 - `queued → in_progress`: worker moves file from `tickets/queue/` to `tickets/in-progress/` and creates `.worktrees/T-NNNN/`.
-- `in_progress → in_review`: worker pushes branch and posts inbox `kind: completion`. Technoking opens PR. **The file remains in `tickets/in-progress/`; only the `status` field flips.** No separate `in-review/` directory exists.
+- `in_progress → in_review`: worker pushes branch and posts inbox `kind: completion`. Technoking opens PR. **File stays in `tickets/in-progress/`; only the `status` field flips.** No separate `in-review/` directory.
 - `in_review → done`: PR merged. File moves to `tickets/done/`. Worktree removed.
 - `* → cancelled`: explicit `/abort` or scope reset.
 
-### Rescue
-
+**Rescue**:
 ```
 dispatched → patch_received → validation_queued → resolved
                                                 ↘  failed (escalation_needed)
 ```
 `failed` never auto-retries; always escalates to user.
 
-### Backlog
-
+**Backlog**:
 ```
 open → promoted (T-NNNN ticket created, BL moved to archive/)  OR  closed (won't fix)
 ```
 
-## Dispatch dependencies
-
-Technoking checks `depends_on` before dispatching: a ticket with unresolved deps stays in `tickets/queue/` and is reconsidered on each poll. Workers do not check `depends_on` themselves — if a ticket is in their pane's queue, it is ready.
-
 ## File operations
 
-- **Atomicity**: claiming a ticket = `mv` file + create worktree + edit frontmatter (`status`, `assignee`, `updated`) in one shell sequence (`mv`, not `git mv` — `.claude-team/` is gitignored). Orphans (file in `in-progress/` without worktree, or vice versa) are surfaced by `/cleanup`.
+- **Dispatch deps**: Technoking checks `depends_on` before dispatching; unresolved-dep tickets stay in `tickets/queue/` and are reconsidered each poll. Workers don't check `depends_on` — if it's in their queue, it's ready.
+- **Atomicity**: claiming = `mv` file + create worktree + edit frontmatter (`status`, `assignee`, `updated`) in one shell sequence (`mv`, not `git mv` — `.claude-team/` is gitignored). Orphans surfaced by `/cleanup`.
 - **Updating**: every state change bumps `updated`. Read full file → modify → write whole file atomically. No in-place sed substitution.
 - **Archive**: `/cleanup` moves done >30d and cancelled >7d into `archive/{YYYY-MM}/`. Archived files retain original IDs/contents — read-only.
 - **Concurrency**: multiple workers may sit in `tickets/in-progress/` (different IDs) but cannot touch overlapping `files_in_scope` — Technoking's step-6 decomposition prevents overlap; if unavoidable, sequence via `depends_on`.
@@ -269,12 +262,8 @@ Technoking checks `depends_on` before dispatching: a ticket with unresolved deps
 }
 ```
 
-- **Keys are pane names** (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`) — stable identifiers that survive persona renames.
-- `pid` is the **tmux pane PID** (pane's first process, usually the shell that forked `claude`); tracks pane liveness, not claude's process directly.
-- `pane_id` is the tmux target (e.g. `claude-team:team.2`) for `tmux send-keys`/`select-pane`.
-- `main` (Technoking) is **not** tracked here — the user's primary pane is implicit.
+- **Keys are pane names** (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`) — stable across persona renames. `main` (Technoking) is **not** tracked — the user's primary pane is implicit.
+- `pid` = **tmux pane PID** (pane's first process, usually the shell that forked `claude`); tracks pane liveness, not claude's process directly. `pane_id` (e.g. `claude-team:team.2`) is the tmux target for `send-keys`/`select-pane`.
 - Counter increment: read → +1 → write, encapsulated by `ticket-publish.sh`. `RR-`, `RESCUE-`, `HANDOFF-`, `INBOX-` prefixes do not consume counters.
 
-## Cross-skill references
-
-Branch naming → `git-flow`; inbox polling, directive delivery, headless `claude` dispatch → `tmux-worker-protocol`; rescue triggers and validation flow → `adversarial-review-bridge`; 11-step lifecycle → `orchestration-guide`.
+**Cross-skill**: branch naming → `git-flow`; inbox polling, directive delivery, headless `claude` dispatch → `tmux-worker-protocol`; rescue triggers and validation flow → `adversarial-review-bridge`; 11-step lifecycle → `orchestration-guide`.
