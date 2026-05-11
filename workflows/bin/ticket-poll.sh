@@ -8,7 +8,10 @@ set -euo pipefail
 IFS=$'\n\t'
 
 CLAUDE_TEAM_DIR="${CLAUDE_TEAM_DIR:-.claude-team}"
-AGENTS_DIR="workflows/agents"
+# Self-locate: script lives in <plugin-root>/bin/, persona files in <plugin-root>/agents/.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+AGENTS_DIR="${PLUGIN_ROOT}/agents"
 QUEUE_DIR="${CLAUDE_TEAM_DIR}/tickets/queue"
 INPROG_DIR="${CLAUDE_TEAM_DIR}/tickets/in-progress"
 

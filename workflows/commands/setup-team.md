@@ -47,12 +47,12 @@ personas:
 ```
 
 **Step 5 — Launch tmux worker panes**
-Call `workflows/scripts/tmux-setup.sh` → 4 panes: `worker-be`, `worker-fe`, `worker-qa`, `worker-review`.
+Call `tmux-setup.sh` (plugin's `bin/` is in PATH; call by name, do NOT use `workflows/scripts/...` paths or create symlinks) → 4 panes: `worker-be`, `worker-fe`, `worker-qa`, `worker-review`.
 See tmux-worker-protocol § Pane Layout.
 If script absent (stage 6 not yet complete): log warning, skip steps 5–7, advise rerun after stage 6.
 
 **Step 6 — Attach personas to panes**
-For each worker pane: `workflows/scripts/worker-launch.sh <pane-id> <persona-slug>`.
+For each worker pane: `worker-launch.sh <pane-id> <persona-slug>` (bare name; PATH resolves to the installed plugin's `bin/`).
 See tmux-worker-protocol § Headless Launch for CLI flags and VERIFY marker.
 
 **Step 7 — Update `workers/registry.json` panes**

@@ -40,7 +40,7 @@ Stored in `.claude-team/workers/registry.json` after `/setup-team`.
 
 ## Headless launch
 
-Each worker pane runs `claude` non-interactively with a persona-loaded prompt. The launch is encapsulated by `workflows/scripts/worker-launch.sh`:
+Each worker pane runs `claude` non-interactively with a persona-loaded prompt. The launch is encapsulated by `worker-launch.sh` (the plugin's `bin/` directory is added to PATH by Claude Code; call scripts by bare name, never with `workflows/scripts/...` paths and never via symlinks):
 
 - The script `cd`s into the worktree, sets `CLAUDE_PANE=<pane-name>` so the worker can identify itself, and starts `claude` with the persona's system prompt loaded from `workflows/agents/<persona>.md`.
 - **Exact CLI flags (headless mode, agent loading) are owned by `worker-launch.sh`** — when Claude Code's headless API changes, only that script updates. Other skills and personas do not embed CLI flags.
@@ -111,7 +111,7 @@ loop every 30 seconds:
 # Batched poll: 10 cycles × 30 s = 5 min wall clock per Bash call.
 # Worker calls this repeatedly until a non-"none:" line appears.
 for i in $(seq 1 10); do
-  out=$(workflows/scripts/ticket-poll.sh <SLUG> 2>&1)
+  out=$(ticket-poll.sh <SLUG> 2>&1)
   echo "[poll $i @ $(TZ=Asia/Seoul date +%H:%M:%S)] $out"
   case "$out" in
     none:*) sleep 30 ;;
@@ -128,7 +128,7 @@ When in-progress, the worker checks **only** its own ticket and `inbox/` for `ki
 
 **Exception (worker-review)**: Roastmaster also polls `kind: review_request` addressed to its pane. See `the-roastmaster.md § Phase A`.
 
-`workflows/scripts/ticket-poll.sh` is the helper used by workers. `worker-launch.sh` injects the concrete loop as the first user message so a fresh worker enters polling immediately.
+`ticket-poll.sh` is the helper used by workers (resolved via PATH from the plugin's `bin/`). `worker-launch.sh` injects the concrete loop as the first user message so a fresh worker enters polling immediately.
 
 **While idle, workers must not**: invoke slash commands, explore the codebase, edit files, or call tools other than the Bash polling block. Idle = poll only.
 

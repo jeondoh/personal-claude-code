@@ -69,7 +69,7 @@ node -v && tmux -V   # 버전 확인
 1. `.claude-team/` 디렉터리 트리 생성 (`tickets/`, `reviews/`, `inbox/`, `rescues/` 등)
 2. `.claude-team/config.yml` 작성 (페르소나 모델 배정 기록)
 3. `workers/registry.json` 초기화 (counter: T=0, RV=0, BL=0)
-4. `workflows/scripts/tmux-setup.sh` 호출 → 4개 워커 페인 생성
+4. `tmux-setup.sh` 호출 (플러그인 `bin/` 이 PATH 에 자동 추가됨 — bare name 으로 호출, 심볼릭 링크 만들지 말 것) → 4개 워커 페인 생성
    - `worker-be` (Persistence Paladin), `worker-fe` (Pixel Wizard)
    - `worker-qa` (What-If Witch), `worker-review` (The Roastmaster)
 5. 각 페인에 `worker-launch.sh` 로 헤드리스 `claude` + 페르소나 부착

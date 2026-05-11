@@ -6,7 +6,11 @@ set -euo pipefail
 IFS=$'\n\t'
 
 CLAUDE_TEAM_DIR="${CLAUDE_TEAM_DIR:-.claude-team}"
-AGENTS_DIR="workflows/agents"
+# Self-locate: this script lives in <plugin-root>/bin/, persona files in <plugin-root>/agents/.
+# Works regardless of cwd (worker runs in user project dir, not plugin dir).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+AGENTS_DIR="${PLUGIN_ROOT}/agents"
 REGISTRY="${CLAUDE_TEAM_DIR}/workers/registry.json"
 
 # ---------- helpers ----------------------------------------------------------
@@ -105,10 +109,10 @@ You are now in idle polling mode for ${SLUG}. Follow tmux-worker-protocol § Pol
 
 Polling protocol (REPEAT until a ticket appears — do not stop after one poll):
 
-Step 1. Execute this Bash block (use the Bash tool, timeout 320000ms):
+Step 1. Execute this Bash block (use the Bash tool, timeout 320000ms). The plugin's bin/ directory is in PATH, so call \`ticket-poll.sh\` by name:
 
   for i in \$(seq 1 10); do
-    out=\$(workflows/scripts/ticket-poll.sh ${SLUG} 2>&1)
+    out=\$(ticket-poll.sh ${SLUG} 2>&1)
     echo "[poll \$i @ \$(TZ=Asia/Seoul date +%H:%M:%S)] \$out"
     case "\$out" in
       none:*) sleep 30 ;;
@@ -117,7 +121,7 @@ Step 1. Execute this Bash block (use the Bash tool, timeout 320000ms):
   done
 
 Step 2. Inspect the final output:
-  - If a non-"none:" line appeared → run \`workflows/scripts/ticket-poll.sh ${SLUG} --claim\` to atomically move the ticket to in-progress/, read it from .claude-team/tickets/in-progress/, then begin work per ticket-protocol.
+  - If a non-"none:" line appeared → run \`ticket-poll.sh ${SLUG} --claim\` to atomically move the ticket to in-progress/, read it from .claude-team/tickets/in-progress/, then begin work per ticket-protocol.
   - If ALL 10 polls returned "none:" → repeat Step 1 (run the Bash block again). Continue indefinitely.
 
 Constraints while idle:
