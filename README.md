@@ -78,10 +78,10 @@ Technoking → 머지 → 보고
 
 ### 워커는 어떻게 동작하나 — 2 단계 launch
 
-워커 페인은 평소엔 **claude 가 떠 있지 않다**. 그냥 평범한 shell 이 30 초마다 ticket 큐를 조용히 폴링할 뿐. ticket 이 떨어지면 그제서야 claude 가 그 자리에서 발화하고, 작업이 끝나면 claude 는 죽고 shell 이 다시 폴링으로 복귀한다.
+워커 페인은 평소 shell 이 30 초마다 ticket 큐를 폴링한다 (claude 없음). ticket 이 떨어지면 그 자리에서 claude 가 발화하고, 작업이 끝나면 claude 는 종료되며 shell 이 폴링으로 복귀한다. 매 ticket 마다 fresh claude 세션.
 
 ```
-[idle]               shell 폴링 (claude 없음, 토큰 0)
+[idle]               shell 폴링 (claude 없음)
     ↓ ticket-poll.sh 가 큐에서 자기 SLUG 매칭되는 ticket 발견
 [claim]              queue/ → in-progress/ 로 atomic mv, owner 갱신
     ↓
@@ -93,13 +93,6 @@ Technoking → 머지 → 보고
     ↓
 [idle 복귀]           다음 ticket 까지 다시 shell 폴링
 ```
-
-**의미**:
-
-- **stateless 워커** — ticket 단위로 fresh claude. 직전 ticket 의 컨텍스트가 다음에 새지 않음. 모든 상태는 `.claude-team/` 파일이 보존.
-- **토큰 효율** — idle 시점에 claude 가 아예 없으니 폴링 비용 0. 비용은 실제 작업 시점에만 발생.
-- **장애 격리** — 한 ticket 의 claude 가 깨져도 다음 ticket 은 영향 없음. shell 폴링 루프가 그냥 계속 살아 있음.
-- **UI 청결** — 페인 채팅창에 "Bash 폴링 중..." 같은 노이즈 없음. ticket 발화 시점부터 종료까지만 claude UI 가 보임.
 
 자세한 launch 메커니즘 (sentinel 파일, watchdog, CLI flags) 은 [`workflows/skills/tmux-worker-protocol/SKILL.md`](workflows/skills/tmux-worker-protocol/SKILL.md) 의 § Headless launch 참조.
 
