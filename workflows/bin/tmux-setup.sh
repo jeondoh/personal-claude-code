@@ -6,12 +6,23 @@ IFS=$'\n\t'
 # at the user's current working directory. main pane runs Technoking
 # interactively; worker panes run silent polling claude instances.
 #
-# Pane index → name mapping (visual reading order, top-down):
-#   team.0  main           (top-left)            Technoking
-#   team.1  worker-review  (bottom-left)         The Roastmaster
-#   team.2  worker-fe      (top-right)           Pixel Wizard
-#   team.3  worker-be      (middle-right)        Persistence Paladin
-#   team.4  worker-qa      (bottom-right)        What-If Witch
+# Layout (matches README):
+#   ┌──────────────┬──────────────┐
+#   │              │ worker-fe    │   pane 2 (top-right)
+#   │              ├──────────────┤
+#   │ main         │ worker-be    │   pane 3 (mid-right)
+#   │ pane 0       ├──────────────┤
+#   │ (top-left)   │ worker-qa    │   pane 4 (bottom-right)
+#   ├──────────────┤              │
+#   │ worker-review│              │
+#   │ pane 1       │              │
+#   └──────────────┴──────────────┘
+#
+#   team.0  main           Technoking
+#   team.1  worker-review  The Roastmaster
+#   team.2  worker-fe      Pixel Wizard
+#   team.3  worker-be      Persistence Paladin
+#   team.4  worker-qa      What-If Witch
 #
 # Usage: tmux-setup.sh [--session-name <name>]
 # Exit codes: 0=ok, 1=generic fail, 2=preflight fail
@@ -64,34 +75,34 @@ fi
 tmux new-session -d -s "${SESSION_NAME}" -n team -c "${USER_PWD}"
 tmux select-pane -t "${SESSION_NAME}:team.0" -T "main (Technoking)"
 
-# --- Build layout (split order chosen so pane indices match visual order) ---
-# Order matters: tmux assigns the next available index to each new pane.
-# Proportions: top row 70% / bottom 30%; top split 50/50 horizontal; right
-# column split into thirds.
+# --- Build layout (two independent columns) ---
+# IMPORTANT: tmux RENUMBERS pane indices on each split — they follow layout-
+# tree DFS order (top-down, left-right), NOT creation order. So don't set
+# titles between splits; do all splits first, then label by final index.
 #
-# Step 1: split pane 0 vertically — new pane 1 takes the bottom 30%
-#         (Roastmaster). Pane 0 retains the top 70%.
-tmux split-window -v -t "${SESSION_NAME}:team.0" -p 30 -c "${USER_PWD}"
-tmux select-pane -t "${SESSION_NAME}:team.1" -T "worker-review (Roastmaster)"
-
-# Step 2: split pane 0 (top) horizontally — new pane 2 is top-right 50%.
+# Step 1: split pane 0 horizontally — left column / right column.
 tmux split-window -h -t "${SESSION_NAME}:team.0" -p 50 -c "${USER_PWD}"
+# Step 2: subdivide the right column into 3 stacked panes.
+tmux split-window -v -t "${SESSION_NAME}:team.1" -p 67 -c "${USER_PWD}"
+tmux split-window -v -t "${SESSION_NAME}:team.2" -p 50 -c "${USER_PWD}"
+# Step 3: split the left column vertically (main 60% / worker-review 40%).
+# After this split, tmux re-indexes: the new bottom-left pane becomes index 1,
+# right-column panes shift to 2/3/4.
+tmux split-window -v -t "${SESSION_NAME}:team.0" -p 40 -c "${USER_PWD}"
+
+# Final layout (after tmux renumbering):
+#   team.0 = main           (top-left, 50% wide × 60% tall)
+#   team.1 = worker-review  (bottom-left, 50% wide × 40% tall)
+#   team.2 = worker-fe      (top-right, 50% wide × ~33% tall)
+#   team.3 = worker-be      (mid-right, 50% wide × ~33% tall)
+#   team.4 = worker-qa      (bottom-right, 50% wide × ~33% tall)
+
+# Now set titles based on the final indices.
+tmux select-pane -t "${SESSION_NAME}:team.0" -T "main (Technoking)"
+tmux select-pane -t "${SESSION_NAME}:team.1" -T "worker-review (Roastmaster)"
 tmux select-pane -t "${SESSION_NAME}:team.2" -T "worker-fe (Pixel Wizard)"
-
-# Step 3: split pane 2 (top-right) vertically — new pane 3 is the lower 2/3.
-tmux split-window -v -t "${SESSION_NAME}:team.2" -p 67 -c "${USER_PWD}"
 tmux select-pane -t "${SESSION_NAME}:team.3" -T "worker-be (Persistence Paladin)"
-
-# Step 4: split pane 3 (lower-right) vertically — new pane 4 is the bottom 50%.
-tmux split-window -v -t "${SESSION_NAME}:team.3" -p 50 -c "${USER_PWD}"
 tmux select-pane -t "${SESSION_NAME}:team.4" -T "worker-qa (What-If Witch)"
-
-# Final layout:
-#   team.0 = main          (top-left, 50% wide × 70% tall)
-#   team.1 = worker-review (bottom row, full width × 30% tall)
-#   team.2 = worker-fe     (top-right, 50% wide × ~23% tall)
-#   team.3 = worker-be     (mid-right, 50% wide × ~23% tall)
-#   team.4 = worker-qa     (bottom-right, 50% wide × ~23% tall)
 
 # --- Launch claude in every pane (main = interactive, workers = silent polling) ---
 # Bash 3 compatible — no associative arrays.

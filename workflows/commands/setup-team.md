@@ -52,7 +52,7 @@ personas:
 Call `tmux-setup.sh` (plugin's `bin/` is in PATH — call by bare name, do NOT use `workflows/scripts/...` paths or create symlinks). The script:
 
 - Creates the `claude-team` session **rooted at the user's current working directory** (`pwd` at /setup-team invocation time). All panes inherit this cwd.
-- Splits 5 panes in this order: `main` (pane 0) → `worker-review` (pane 1) → `worker-fe` (pane 2) → `worker-be` (pane 3) → `worker-qa` (pane 4).
+- Splits 5 panes per the README layout: left column = `main` (top) + `worker-review` (bottom), right column = `worker-fe` → `worker-be` → `worker-qa` stacked.
 - Launches `claude --dangerously-skip-permissions` in **every pane** (including `main`) via `worker-launch.sh`.
   - `main` (Technoking) gets a short Korean welcome listing the common slash commands; user then types here.
   - Worker panes get a one-time persona greeting + enter a silent polling loop. No visible per-poll output.

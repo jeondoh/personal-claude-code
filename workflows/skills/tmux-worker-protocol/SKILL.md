@@ -16,15 +16,18 @@ Workers are **headless `claude` instances running inside tmux panes**, isolated 
 │ main         │ worker-be    │   pane 3
 │ (Technoking) ├──────────────┤
 │   pane 0     │ worker-qa    │   pane 4
-├──────────────┴──────────────┤
-│ worker-review (Roastmaster) │   pane 1
-└─────────────────────────────┘
+├──────────────┤              │
+│ worker-      │              │
+│ review       │              │
+│   pane 1     │              │
+└──────────────┴──────────────┘
 ```
 
-- **Top row (70% height)**: `main` (left half) / right column with `worker-fe` → `worker-be` → `worker-qa` (equal thirds).
-- **Bottom row (30% height, full width)**: `worker-review`.
+- **Left column (50% wide)**: `main` (top 60%) / `worker-review` (bottom 40%).
+- **Right column (50% wide)**: `worker-fe` → `worker-be` → `worker-qa` in equal thirds.
+- **Pane index**: tmux numbers panes in layout-tree DFS order (top-down, left-right) and **renumbers on every split**. Don't rely on creation order — use the pane name (stable identifier in `registry.json`).
 
-`tmux` pane indices are assigned by the split order in `tmux-setup.sh` and chosen so the second-most-prominent slot (pane 1) goes to the reviewer. Pane names (`main`, `worker-*`) are the stable identifiers; scripts and `registry.json` reference them by name, not index. `Spec Shaman` and `Galaxy Brain` are subagents — no pane, run inside Technoking's `main` via the `Task` tool.
+Pane names (`main`, `worker-*`) are the stable identifiers; scripts and `registry.json` reference them by name, not by tmux index. `Spec Shaman` and `Galaxy Brain` are subagents — no pane, run inside Technoking's `main` via the `Task` tool.
 
 ## Pane → persona mapping
 
