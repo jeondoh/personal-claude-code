@@ -202,7 +202,7 @@ created: 2026-05-11T15:00:00+09:00
 
 ### 7. Handoff (`type: handoff`)
 
-`/handoff` serialization for next session. Body: free-form session summary, decisions, blockers, recommended first action on resume.
+`/handoff` serialization for next session; body = free-form session summary, decisions, blockers, recommended first action on resume.
 
 ```yaml
 ---
@@ -255,7 +255,7 @@ Technoking checks `depends_on` before dispatching: a ticket with unresolved deps
 - **Archive**: `/cleanup` moves done >30d and cancelled >7d into `archive/{YYYY-MM}/`. Archived files retain original IDs/contents — read-only.
 - **Concurrency**: multiple workers may sit in `tickets/in-progress/` (different IDs) but cannot touch overlapping `files_in_scope` — Technoking's step-6 decomposition prevents overlap; if unavoidable, sequence via `depends_on`.
 
-## Counter management — `workers/registry.json`
+## Registry — `workers/registry.json`
 
 ```json
 {
@@ -270,11 +270,10 @@ Technoking checks `depends_on` before dispatching: a ticket with unresolved deps
 ```
 
 - **Keys are pane names** (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`) — stable identifiers that survive persona renames.
-- `pid` is the **tmux pane PID** (the pane's first process — usually the shell that forked `claude`). It tracks pane liveness, not claude's process directly.
+- `pid` is the **tmux pane PID** (pane's first process, usually the shell that forked `claude`); tracks pane liveness, not claude's process directly.
 - `pane_id` is the tmux target (e.g. `claude-team:team.2`) for `tmux send-keys`/`select-pane`.
 - `main` (Technoking) is **not** tracked here — the user's primary pane is implicit.
-
-Counter increment: read → +1 → write, encapsulated by `ticket-publish.sh`. `RR-`, `RESCUE-`, `HANDOFF-`, `INBOX-` prefixes do not consume counters.
+- Counter increment: read → +1 → write, encapsulated by `ticket-publish.sh`. `RR-`, `RESCUE-`, `HANDOFF-`, `INBOX-` prefixes do not consume counters.
 
 ## Cross-skill references
 
