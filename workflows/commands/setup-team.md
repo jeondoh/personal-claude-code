@@ -53,9 +53,9 @@ Call `tmux-setup.sh` (plugin's `bin/` is in PATH — call by bare name, do NOT u
 
 - Creates the `claude-team` session **rooted at the user's current working directory** (`pwd` at /setup-team invocation time). All panes inherit this cwd.
 - Splits 5 panes per the README layout: left column = `main` (top) + `worker-review` (bottom), right column = `worker-fe` → `worker-be` → `worker-qa` stacked.
-- Launches `claude --dangerously-skip-permissions` in **every pane** (including `main`) via `worker-launch.sh`.
-  - `main` (Technoking) gets a short Korean welcome listing the common slash commands; user then types here.
-  - Worker panes get a one-time persona greeting + enter a silent polling loop. No visible per-poll output.
+- Launches via `worker-launch.sh` with mode-specific behavior:
+  - `main` (Technoking) → `claude --dangerously-skip-permissions` interactive, with a short Korean welcome listing the common slash commands.
+  - Worker panes → `worker-idle.sh` shell polling loop. **No claude session while idle** (zero tokens, clean pane log). When a ticket is claimed, the shell execs claude with the ticket as the first message; when claude touches its sentinel file, the shell kills it and resumes polling.
 - Writes each worker pane's `{persona, pid, pane_id}` into `workers/registry.json` keyed by pane name (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`), atomically and lock-protected. `main` is NOT tracked — it's the user's pane and implicit.
 
 Re-runs are idempotent: if `claude-team` already exists, the script prints an attach hint and exits.

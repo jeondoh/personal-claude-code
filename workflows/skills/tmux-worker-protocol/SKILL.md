@@ -41,29 +41,47 @@ worker-review → the-roastmaster       (opus)
 
 Stored in `.claude-team/workers/registry.json` after `/setup-team`.
 
-## Headless launch
+## Headless launch — 2-stage architecture
 
-Every pane (including `main`) runs `claude --dangerously-skip-permissions` so Bash/Edit calls never stall on prompts. Launch is encapsulated by `worker-launch.sh` (the plugin's `bin/` is added to PATH by Claude Code; call scripts by bare name, never via `workflows/scripts/...` paths or symlinks).
+Workers and main use **different launch shapes** to keep the pane chat clean:
 
-What the script does:
+- **`main` (Technoking)**: launches `claude --dangerously-skip-permissions` directly. Interactive session waits for the user. Persona body loaded from `.claude-team/.runtime/technoking.prompt`; first-message loaded from `.claude-team/.runtime/technoking.task` (short welcome listing common slash commands).
+
+- **`worker-*` (Roastmaster, Wizard, Paladin, Witch)**: launches `worker-idle.sh` — a pure shell polling loop. **No `claude` process while idle.** When a ticket is claimed, the shell execs `claude` with the ticket as the first message; when claude exits (via sentinel watchdog, see below), the shell resumes polling. This keeps the pane chat log clean during idle (no Bash tool UI, no `Running…` indicators) and costs zero tokens while no tickets are queued.
+
+### `worker-launch.sh`
+
+Encapsulates both launch shapes. The plugin's `bin/` is in PATH (call scripts by bare name, never via `workflows/scripts/...` paths or symlinks). What the script does:
 
 1. Strip frontmatter from `agents/<slug>.md` and persist the persona body to `.claude-team/.runtime/<slug>.prompt`.
-2. Write the bootstrap first-user-message to `.claude-team/.runtime/<slug>.task`. Both files are read at exec time via `--append-system-prompt-file` and `"$(cat <task-file>)"` — this avoids tmux `send-keys` UTF-8 quoting bugs (bash 3.2's `printf %q` mangles multi-byte chars).
-3. `tmux send-keys` the launch command:
-   ```
-   claude --dangerously-skip-permissions \
-     --model <alias-from-persona-frontmatter> \
-     --append-system-prompt-file <abs-path-to-.runtime/<slug>.prompt> \
-     "$(cat <abs-path-to-.runtime/<slug>.task>)"
-   ```
-4. Capture the pane's PID via `tmux display-message -p '#{pane_pid}'` and (worker panes only) write `{persona, pid, pane_id}` to `.claude-team/workers/registry.json` keyed by **pane name**, atomically (temp → mv, lock-protected). `main` is NOT tracked — it's the user's primary pane and implicit.
+2. **Mode branch**:
+   - `main` → write welcome message to `.claude-team/.runtime/<slug>.task`; send `claude … "$(cat …task)"` to the pane via `tmux send-keys`. Files are read at exec time, avoiding bash 3.2's `printf %q` UTF-8 mangling.
+   - `worker-*` → send `worker-idle.sh <slug> <pane-name> <abs-prompt-file>` to the pane. No `.task` file is needed.
+3. Capture the pane's PID via `tmux display-message -p '#{pane_pid}'` and (worker panes only) write `{persona, pid, pane_id}` to `.claude-team/workers/registry.json` keyed by **pane name**, atomically (temp → mv, lock-protected). `main` is NOT tracked — implicit.
 
-### Mode-specific first message
+### `worker-idle.sh` (worker shell loop)
 
-- **`main` (Technoking)**: a short user-facing welcome listing the common slash commands. After printing, claude waits for user input. No polling.
-- **`worker-*`**: one-time persona greeting (read from frontmatter `idle_greeting:`), then **silent polling loop**. The worker is instructed not to narrate, not to echo poll counts, and to emit visible output only on (a) the greeting, (b) a real ticket appearing, or (c) an unrecoverable error.
+```text
+greeting (one-time)
+↓
+while true:
+  poll = ticket-poll.sh <slug>
+  if poll == none → sleep 30, repeat
+  if poll matched →
+    ticket-poll.sh <slug> --claim
+    find ticket file in in-progress/ where owner == <slug>
+    rm sentinel
+    claude --dangerously-skip-permissions --model X \
+      --append-system-prompt-file <persona.prompt> \
+      "<first-message: read ticket, work it, touch SENTINEL at end>" &
+    while claude alive AND sentinel not exists: sleep 3
+    when sentinel appears: kill -INT claude (then -TERM)
+    loop (back to polling)
+```
 
-**Exact CLI flags are owned by `worker-launch.sh`** — when Claude Code's headless API changes, only that script updates. Other skills and personas do not embed CLI flags.
+The first-message to claude includes an explicit instruction: **after posting the completion/escalation inbox message, claude's final Bash tool call must be `touch <.claude-team/.runtime/<pane-name>.complete>`** — the shell watchdog sees the sentinel and kills the claude session, returning the pane to idle. Without this step, the worker stays blocked on the current ticket forever.
+
+**Exact CLI flags are owned by `worker-launch.sh` and `worker-idle.sh`** — when Claude Code's headless API changes, only those scripts update. Other skills and personas do not embed CLI flags.
 
 The worker's first action on launch:
 

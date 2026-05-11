@@ -68,7 +68,11 @@ if [[ ${#ALL[@]} -eq 0 ]]; then
 fi
 
 # Build <created-ts>\t<filepath>, sort oldest-first, extract paths.
-mapfile -t SORTED < <(
+# bash 3.2 compatible (no `mapfile`/`readarray`).
+SORTED=()
+while IFS= read -r _line; do
+  SORTED+=("$_line")
+done < <(
   for f in "${ALL[@]}"; do
     ASSIGNEE="$(fm_field "$f" assignee)"
     [[ "$ASSIGNEE" == "$SLUG" || "$ASSIGNEE" == "unassigned" || -z "$ASSIGNEE" ]] || continue

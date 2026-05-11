@@ -114,12 +114,27 @@ SYSTEM_PROMPT="${PERSONA_BODY}
 
 You are ${SLUG}. Before acting: read CLAUDE.md, your persona file (${PERSONA_FILE}), and your assigned skills."
 
-# ---------- assemble first-message (mode-specific) ---------------------------
-# main pane: short user-facing welcome. Worker panes: silent polling loop with
-# a one-time persona greeting read from `idle_greeting:` frontmatter.
+# ---------- persist persona prompt to file -----------------------------------
+# Both main and worker panes need the persona body in a file so claude can
+# pick it up via --append-system-prompt-file. Done before mode branching.
+
+RUNTIME_DIR="${CLAUDE_TEAM_DIR}/.runtime"
+mkdir -p "$RUNTIME_DIR"
+PROMPT_FILE="${RUNTIME_DIR}/${SLUG}.prompt"
+printf '%s' "$SYSTEM_PROMPT" > "$PROMPT_FILE"
+ABS_PROMPT_FILE="$(to_abs "$PROMPT_FILE")"
+
+# ---------- launch (mode-specific) -------------------------------------------
+# main pane     → claude with welcome message (interactive, user-facing)
+# worker panes  → worker-idle.sh shell loop (no claude until a ticket arrives)
+#
+# Why split: worker-idle.sh keeps the pane chat log clean during idle (just a
+# few short log lines, no Bash tool UI). When a ticket is claimed, the shell
+# execs claude with the ticket as first message; when claude finishes (it
+# touches a sentinel file), shell resumes polling.
 
 if [[ "$PANE_NAME" == "main" ]]; then
-  read -r -d '' DEFAULT_BOOTSTRAP <<EOF || true
+  read -r -d '' WELCOME <<EOF || true
 이 메시지는 사용자에게 출력하는 환영 인사다. 정확히 한 번 다음 텍스트만 출력하고 사용자 입력을 기다린다. 추가 설명·다른 동작 없음.
 
 ━━ Technoking 작업대 ━━
@@ -138,64 +153,17 @@ if [[ "$PANE_NAME" == "main" ]]; then
 
 위 텍스트를 출력한 직후 무조건 사용자 입력 대기. 자동 동작·자동 polling X.
 EOF
+
+  TASK_FILE="${RUNTIME_DIR}/${SLUG}.task"
+  printf '%s' "${INITIAL_TASK:-$WELCOME}" > "$TASK_FILE"
+  ABS_TASK_FILE="$(to_abs "$TASK_FILE")"
+
+  LAUNCH_CMD="claude --dangerously-skip-permissions --model ${MODEL} --append-system-prompt-file $(printf '%q' "$ABS_PROMPT_FILE") \"\$(cat $(printf '%q' "$ABS_TASK_FILE"))\""
 else
-  GREETING="$(fm_field "$PERSONA_FILE" idle_greeting)"
-  [[ -z "$GREETING" ]] && GREETING="[${SLUG}] 가동. ticket 대기 중."
-  read -r -d '' DEFAULT_BOOTSTRAP <<EOF || true
-You are ${SLUG} running headless in tmux pane "${PANE_NAME}". You are in SILENT idle polling mode.
-
-ONE-TIME GREETING (first turn only): output exactly the following line and nothing else — no preamble, no narration:
-${GREETING}
-
-THEN enter SILENT polling mode. While idle, you MUST:
-- Not narrate, explain, or comment.
-- Not echo poll iteration counts or timestamps.
-- Not produce any text response between polling cycles.
-- Only emit visible text when (a) the one-time greeting above, (b) a real ticket appears (announce ticket ID + title), or (c) an unrecoverable error.
-
-POLLING BLOCK (call the Bash tool, timeout 600000ms). The block itself runs silently — only the final non-"none:" line is captured:
-
-  for i in \$(seq 1 18); do
-    out=\$(ticket-poll.sh ${SLUG} 2>&1)
-    case "\$out" in
-      none:*) sleep 30 ;;
-      *) printf '%s\n' "\$out"; break ;;
-    esac
-  done
-
-After the Bash call returns:
-- If output is empty or starts with "none:" → re-run the polling block. Stay silent. No commentary.
-- If output starts with "queue for" → a ticket is available. Run \`ticket-poll.sh ${SLUG} --claim\`, read the claimed ticket from .claude-team/tickets/in-progress/, announce one line like "[${SLUG}] received <ticket-id>: <title>", then begin work per ticket-protocol.
-
-Allowed tools while idle: Bash (polling only). Do NOT run slash commands, do NOT explore code, do NOT edit files until a ticket is claimed.
-EOF
+  # Worker pane: start the pure-shell polling loop. worker-idle.sh resolves
+  # via PATH (plugin's bin/ is on PATH).
+  LAUNCH_CMD="worker-idle.sh $(printf '%q' "$SLUG") $(printf '%q' "$PANE_NAME") $(printf '%q' "$ABS_PROMPT_FILE")"
 fi
-
-BOOTSTRAP_TASK="${INITIAL_TASK:-$DEFAULT_BOOTSTRAP}"
-
-# ---------- persist prompts to files (avoid tmux send-keys UTF-8 quoting) ----
-# bash 3.2's `printf '%q'` mangles multi-byte chars on `tmux send-keys` typing.
-# Both system prompt and first message go to files; pane shell reads them at
-# exec time via `--append-system-prompt-file` and `"$(cat ...)"`.
-
-RUNTIME_DIR="${CLAUDE_TEAM_DIR}/.runtime"
-mkdir -p "$RUNTIME_DIR"
-PROMPT_FILE="${RUNTIME_DIR}/${SLUG}.prompt"
-TASK_FILE="${RUNTIME_DIR}/${SLUG}.task"
-printf '%s' "$SYSTEM_PROMPT" > "$PROMPT_FILE"
-printf '%s' "$BOOTSTRAP_TASK" > "$TASK_FILE"
-
-ABS_PROMPT_FILE="$(to_abs "$PROMPT_FILE")"
-ABS_TASK_FILE="$(to_abs "$TASK_FILE")"
-
-# ---------- launch -----------------------------------------------------------
-# Verified against `claude --help` (Claude Code 2.1.x):
-#   --dangerously-skip-permissions   bypass permission prompts
-#   --model <alias>                  e.g. "sonnet", "opus"
-#   --append-system-prompt-file <p>  persona body from file
-#   "$(cat <task-file>)"             first user message read at pane exec time
-
-LAUNCH_CMD="claude --dangerously-skip-permissions --model ${MODEL} --append-system-prompt-file $(printf '%q' "$ABS_PROMPT_FILE") \"\$(cat $(printf '%q' "$ABS_TASK_FILE"))\""
 
 tmux send-keys -t "$PANE_ID" "$LAUNCH_CMD" Enter
 
