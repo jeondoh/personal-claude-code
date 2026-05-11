@@ -40,7 +40,7 @@ if [[ "${is_next_project}" -ne 1 ]]; then
   exit 0
 fi
 
-# Require pnpm — the team's canonical package manager (pinned in stack-nextjs/skills).
+# Require pnpm — the team's canonical package manager (pinned in stacks/nextjs/skills).
 if ! command -v pnpm >/dev/null 2>&1; then
   echo "stop-verification (nextjs): pnpm not on PATH" >&2
   echo "  the canonical command is pnpm test — install pnpm 9+ or fix PATH" >&2
