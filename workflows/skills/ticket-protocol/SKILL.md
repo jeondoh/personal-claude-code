@@ -5,9 +5,7 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 
 # Ticket Protocol
 
-`.claude-team/` is the project's transient workflow state. Tickets are markdown files with YAML frontmatter; personas read and write them as the only handoff medium between panes.
-
-`docs/*` is for user artifacts (see `documentation-criteria`). `.claude-team/*` is for inter-persona coordination.
+`.claude-team/` (gitignored) is the project's transient workflow state — markdown files with YAML frontmatter, the only handoff medium between panes. `docs/*` holds user artifacts (see `documentation-criteria`); `.claude-team/*` holds inter-persona coordination.
 
 ## Directory layout
 
@@ -29,8 +27,6 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 └── config.yml         # /setup-team output (codex verified_at, etc.)
 ```
 
-`.claude-team/` is gitignored.
-
 ## ID conventions
 
 | Prefix | Meaning | Counter source | Example |
@@ -45,9 +41,7 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 
 Numeric counters are **4-digit zero-padded** (`T-0001`); auto-extends to 5 digits past `9999`. Filename: `<ID>-<kebab-slug>.md`, slug ≤ 4 words from title. `RR-T-NNNN-N` does not consume a counter — `N` is the review round (1, 2, 3).
 
-## Frontmatter — common fields
-
-Every ticket type carries these; type-specific fields layer on top.
+## Frontmatter — common fields (every type; type-specific fields layer on top)
 
 ```yaml
 ---
@@ -64,8 +58,6 @@ author: technoking                      # persona slug
 ## Ticket type schemas
 
 ### 1. Work ticket (`type: work`)
-
-Created by Technoking in step 6 of `/feat`. Consumed by Paladin / Wizard.
 
 ```yaml
 ---
@@ -87,11 +79,9 @@ author: technoking
 ---
 ```
 
-Body sections (required): **목표**, **수용 기준** (restate AC text), **참조** (Design Doc anchors, ADR links), **테스트 계획**, **완료 정의** (CI, codex review, AC checks).
-
 ### 2. Review report (`type: review-report`)
 
-Created by Roastmaster after each review pass. Filename: `RR-T-NNNN-<n>.md` where `<n>` is the review round.
+Filename `RR-T-NNNN-<n>.md` (`<n>` = review round); immutable once written; multiple rounds → multiple files. `pattern_stuck: true` triggers auto-rescue (see `adversarial-review-bridge`).
 
 ```yaml
 ---
@@ -108,13 +98,7 @@ created: 2026-05-11T16:00:00+09:00
 ---
 ```
 
-Body sections (required): **요약** (1–3 sentences), **BLOCKING 이슈** (each: file:line, problem, expected fix), **권장 사항** (non-blocking), **Codex 리뷰 인용** (paste-or-link from `/codex:adversarial-review`).
-
-`pattern_stuck: true` triggers auto-rescue (see `adversarial-review-bridge`). Review reports are immutable once written; multiple rounds produce multiple files.
-
 ### 3. Rescue record (`type: rescue`)
-
-Created by Technoking when auto-rescue fires.
 
 ```yaml
 ---
@@ -131,15 +115,11 @@ updated: 2026-05-11T17:30:00+09:00
 ---
 ```
 
-Body: short narrative — what triggered, what was dispatched, where the patch landed (`rescue/T-0042` branch), what happened next.
-
 ### 4. Review ticket (`type: review`, id `RV-NNNN`)
 
-`type: review` covers two sub-cases; both share the `RV-NNNN` counter. Schema fields distinguish them.
+Two sub-cases share the `RV-NNNN` counter; schema fields distinguish them.
 
 #### 4a. General PR review (workflow step 9)
-
-Issued by Technoking each round. `assignee: worker-review`.
 
 ```yaml
 ---
@@ -156,11 +136,9 @@ created: 2026-05-11T18:30:00+09:00
 ---
 ```
 
-Body: PR diff summary + previous round BLOCKING items (if any).
-
 #### 4b. Rescue validation (codex-rescue patch verification)
 
-Spawned automatically when a codex-rescue patch arrives. Top-priority. Routed to the original ticket's assignee.
+Spawned automatically when a codex-rescue patch arrives; top-priority; routed to the original ticket's assignee.
 
 ```yaml
 ---
@@ -177,11 +155,9 @@ created: 2026-05-11T17:30:00+09:00
 ---
 ```
 
-Body: instructions to merge the rescue branch locally, re-run failing tests, request Roastmaster re-review.
-
 ### 5. Inbox message (`type: inbox`)
 
-Worker → Technoking notification, OR Technoking → worker directive. Transient — deleted on processing.
+Worker ↔ Technoking notification or directive; transient (deleted on processing); body free-form, ≤ 200 words.
 
 ```yaml
 ---
@@ -198,9 +174,8 @@ created: 2026-05-11T14:35:00+09:00
 ---
 ```
 
-Body: free-form, ≤ 200 words. `kind: directive` is the channel for mid-ticket pivots from Technoking; the targeted worker checks for these at every poll cycle.
-
-New `kind` values:
+`kind` semantics:
+- `directive` — Technoking → worker mid-ticket pivot; targeted worker checks at every poll.
 - `review_request` — Technoking → worker-review: ad-hoc review request (reserve; standard path is a queue ticket).
 - `review_complete` — worker-review → Technoking: verdict delivered (payload: `verdict: APPROVE|COMMENT|BLOCKING`, `report_path`).
 - `pattern_stuck` — worker-review → Technoking: same BLOCKING repeated; triggers auto-rescue (payload: `blocking_signature`, `rev_count`).
@@ -209,7 +184,7 @@ New `kind` values:
 
 ### 6. Backlog (`type: backlog`)
 
-Out-of-scope item discovered during work. Filed by anyone, processed by Technoking during planning.
+Out-of-scope item discovered during work; filed by anyone, processed by Technoking during planning.
 
 ```yaml
 ---
@@ -225,11 +200,9 @@ created: 2026-05-11T15:00:00+09:00
 ---
 ```
 
-Body: what was observed, why it's out of scope for the discovering ticket, suggested approach.
-
 ### 7. Handoff (`type: handoff`)
 
-`/handoff` serialization for next session.
+`/handoff` serialization for next session. Body: free-form session summary, decisions, blockers, recommended first action on resume.
 
 ```yaml
 ---
@@ -242,8 +215,6 @@ unresolved_rescues: [RESCUE-...]
 created: 2026-05-11T18:00:00+09:00
 ---
 ```
-
-Body: free-form session summary, decisions, blockers, recommended first action on resume.
 
 ## State transitions
 
@@ -265,8 +236,7 @@ queued → in_progress → in_review → done
 dispatched → patch_received → validation_queued → resolved
                                                 ↘  failed (escalation_needed)
 ```
-
-`failed` never auto-retries. Always escalates to user.
+`failed` never auto-retries; always escalates to user.
 
 ### Backlog
 
@@ -280,21 +250,10 @@ Technoking checks `depends_on` before dispatching: a ticket with unresolved deps
 
 ## File operations
 
-### Atomicity
-
-A worker claiming a ticket: `mv` the file, create worktree, edit frontmatter (`status`, `assignee`, `updated`) — **in one shell sequence**. (`mv`, not `git mv` — `.claude-team/` is gitignored.) If interrupted mid-claim, `/cleanup` detects orphans (file in `in-progress/` but no worktree, or vice versa) and surfaces to user.
-
-### Updating
-
-Every state change bumps `updated`. Personas write the new frontmatter atomically (read full file → modify → write whole file). No in-place sed substitution.
-
-### Archive
-
-`/cleanup` moves done tickets older than 30d and cancelled older than 7d into `archive/{YYYY-MM}/`. Archived files retain original IDs and contents — read-only.
-
-### Concurrency
-
-Two workers can be in `tickets/in-progress/` simultaneously (different IDs). They cannot work on the same file paths — Technoking's task decomposition (step 6) ensures non-overlapping `files_in_scope`. If overlap is unavoidable, sequence via `depends_on`.
+- **Atomicity**: claiming a ticket = `mv` file + create worktree + edit frontmatter (`status`, `assignee`, `updated`) in one shell sequence (`mv`, not `git mv` — `.claude-team/` is gitignored). Orphans (file in `in-progress/` without worktree, or vice versa) are surfaced by `/cleanup`.
+- **Updating**: every state change bumps `updated`. Read full file → modify → write whole file atomically. No in-place sed substitution.
+- **Archive**: `/cleanup` moves done >30d and cancelled >7d into `archive/{YYYY-MM}/`. Archived files retain original IDs/contents — read-only.
+- **Concurrency**: multiple workers may sit in `tickets/in-progress/` (different IDs) but cannot touch overlapping `files_in_scope` — Technoking's step-6 decomposition prevents overlap; if unavoidable, sequence via `depends_on`.
 
 ## Counter management — `workers/registry.json`
 
@@ -319,11 +278,4 @@ Counter increment: read → +1 → write, encapsulated by `ticket-publish.sh`. `
 
 ## Cross-skill references
 
-- Branch naming derives ticket ID from this skill — see `git-flow`.
-- Inbox polling, directive delivery, headless `claude` dispatch — see `tmux-worker-protocol`.
-- Rescue triggers and validation flow — see `adversarial-review-bridge`.
-- 11-step lifecycle that ties everything together — see `orchestration-guide`.
-
-## When this skill conflicts with the AC
-
-This skill defines the workflow's data model. AC cannot waive frontmatter fields. If an AC seems to require a non-standard field, it goes into the body — frontmatter stays canonical so scripts can rely on it.
+Branch naming → `git-flow`; inbox polling, directive delivery, headless `claude` dispatch → `tmux-worker-protocol`; rescue triggers and validation flow → `adversarial-review-bridge`; 11-step lifecycle → `orchestration-guide`.
