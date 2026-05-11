@@ -37,7 +37,7 @@
       "name": "stack-kotlin-spring",
       "source": "./stack-kotlin-spring",
       "strict": true,
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Kotlin + Spring Boot stack pack — coding rules, data access patterns, testing skills, stop-verification hook",
       "author": {
         "name": "sideholic",
@@ -59,7 +59,7 @@
       "name": "stack-nextjs",
       "source": "./stack-nextjs",
       "strict": true,
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Next.js stack pack — frontend coding rules, data fetching patterns, testing skills, stop-verification hook",
       "author": {
         "name": "sideholic",

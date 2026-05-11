@@ -7,27 +7,46 @@ description: Kotlin idioms and Spring Boot conventions for backend code in this 
 
 Stack-specific overlay on `coding-principles`. When this skill and `coding-principles` agree, follow `coding-principles`. When they diverge, this skill wins for Kotlin/Spring code.
 
-## Versions (pinned)
+## Version handling — detect, don't assume
 
-| Item | Pinned |
-|---|---|
-| JDK | 24 (Java toolchain `languageVersion = 24`) |
-| Kotlin | 2.2.21 |
-| Spring Boot | 4.0.6 |
-| Build | Gradle Kotlin DSL |
+This skill applies to **whichever versions are actually installed in the project**, not a fixed pin. The values in the reference table below were observed at skill authoring time (2026-05); the real source of truth is `build.gradle.kts`. Worker MUST detect first, then verify against official docs when the installed version is outside training-data confidence.
 
-These four are the only "thou shalt" pins. Library coordinates (Spring starters, JDBC drivers, JSON modules, test runners, etc.) are **not pinned** at the workflow level — pick what each ticket needs. The four pins above set behavior contracts a ticket cannot evade.
+### Reference (skill authoring snapshot, not a mandate)
 
-**Boot 4 / `jakarta.*` rule**: Spring Boot 4.x runs on Jakarta EE 10+ (`jakarta.persistence.*`, `jakarta.servlet.*`). `javax.*` is forbidden — the migration is complete. Starter artifact names changed between Boot 3.x and 4.x; **verify exact starter coordinates against the current Spring Boot 4 documentation** rather than trusting training data. Do not invent starter names.
+| Item | Reference | Detect from |
+|---|---|---|
+| JDK | 24 | `build.gradle.kts` → `java.toolchain.languageVersion` |
+| Kotlin | 2.2+ | `build.gradle.kts` → `kotlin("jvm") version "..."` |
+| Spring Boot | 4+ | `build.gradle.kts` → `id("org.springframework.boot") version "..."` |
+| Build | Gradle Kotlin DSL (convention) | (project convention) |
 
-**Kotlin 2.2 compiler args (project standard)**:
+Library coordinates (Spring starters, JDBC drivers, JSON modules, test runners) are **not pinned** at the workflow level — pick what each ticket needs and verify per protocol below.
+
+### Protocol (BLOCKING when violated)
+
+1. **Detect** Spring Boot, Kotlin, JDK from `build.gradle.kts` at the start of work. Record in design notes or PR description.
+2. **Compare to training cutoff**. Evergreen content in this skill (entity rules, immutability, `allOpen` + JPA semantics, transactional boundaries, layering, security defaults — *as concepts*) applies broadly across recent majors.
+3. **If the installed version is newer than your confident training** OR you are about to add a starter coordinate, choose a config key, use a Spring Framework API, or rely on auto-configuration behavior: **MUST verify via official docs before writing code**.
+   - Spring Boot reference: https://docs.spring.io/spring-boot/reference/
+   - Spring Framework reference: https://docs.spring.io/spring-framework/reference/
+   - Kotlin docs: https://kotlinlang.org/docs/
+   - Use the WebFetch tool to fetch the specific section.
+4. **Particularly version-volatile** (always re-verify): starter artifact names (many moved across Boot 3 → 4), property keys under `spring.*` (renamed/relocated between versions), auto-configuration toggles, Kotlin compiler args (Kotlin 2.x introduced new defaults; check before adding `-X` flags).
+5. **Boot 3 → 4 specifically**: Jakarta migration is complete on 4 (`jakarta.persistence.*`, `jakarta.servlet.*`). `javax.*` is forbidden on 4+. Many starters were renamed. If installed Boot is 4+ **always cross-check against current Spring Boot 4 docs**, do not trust Boot 3 knowledge.
+6. **Never invent** starter coordinates, property keys, plugin IDs, or default behaviors from training data. When uncertain, WebFetch → read → code. If docs are ambiguous, escalate via `inbox/` rather than guess.
+7. **Record verification** in PR description: e.g., `Verified against Spring Boot 4.0 § Data Access (2026-05-11)`. Roastmaster & codex use this to scope their review.
+
+### Kotlin compiler args — verify before applying
+
+The args below were standard at skill authoring time but Kotlin major bumps can change defaults. Verify against `https://kotlinlang.org/docs/compiler-reference.html` for the installed Kotlin version before adding to `build.gradle.kts`.
 
 ```kotlin
+// Verify these still exist and have the documented semantics for your Kotlin version.
 freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
 ```
 
 - `-Xjsr305=strict` — treat external nullability annotations strictly.
-- `-Xannotation-default-target=param-property` — Kotlin 2.2 default for annotations on constructor params; avoids the param-vs-property surprise on JPA + validation annotations.
+- `-Xannotation-default-target=param-property` — Kotlin 2.2 default for annotations on constructor params; avoids the param-vs-property surprise on JPA + validation annotations. **If installed Kotlin ≥ 2.3, check whether this is now default-on and the flag is obsolete.**
 
 **JPA + `allOpen` rule (entity authoring)**: the `kotlin("plugin.jpa")` plugin auto-applies `allOpen` for `jakarta.persistence.{Entity, MappedSuperclass, Embeddable}`. Workers do **not** add `open` keyword manually and do **not** write a no-arg constructor manually — both are synthesized.
 

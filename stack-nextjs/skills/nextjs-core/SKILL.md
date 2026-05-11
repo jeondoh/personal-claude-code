@@ -7,18 +7,38 @@ description: Next.js (App Router) and TypeScript conventions for frontend code i
 
 Stack-specific overlay on `coding-principles`. Pinned to App Router (no Pages Router for new code). When this skill and `coding-principles` agree, follow `coding-principles`. When they diverge, this skill wins for Next.js/TypeScript code.
 
-## Versions and tooling (pinned)
+## Version handling — detect, don't assume
 
-| Item | Choice |
-|---|---|
-| Next.js | 15.x (App Router) |
-| React | 19.x |
-| Node | ≥ 20.11 LTS |
-| TypeScript | 5.x |
-| Package manager | pnpm 9.x |
-| Language | TypeScript only — no `.js`/`.jsx` in `app/`, `components/`, `lib/` |
-| `tsconfig` | `strict: true`, `noUncheckedIndexedAccess: true`, `noFallthroughCasesInSwitch: true` |
-| Lint / format | ESLint (`next/core-web-vitals`) + Prettier; pre-commit fails on either |
+This skill applies to **whichever version is actually installed in the project**, not a fixed pin. The values in the reference table below were observed at skill authoring time (2026-05); the real source of truth is the project itself. Worker MUST detect first, then verify against official docs when the installed version is outside training-data confidence.
+
+### Reference (skill authoring snapshot, not a mandate)
+
+| Item | Reference | Detect from |
+|---|---|---|
+| Next.js | 15+ (App Router) | `package.json` → `dependencies.next` |
+| React | 19+ | `package.json` → `dependencies.react` |
+| Node | ≥ 20.11 LTS | `node --version`, `.nvmrc`, `package.json` → `engines.node` |
+| TypeScript | 5+ | `package.json` → `devDependencies.typescript` |
+| Package manager | pnpm 9+ | `package.json` → `packageManager` |
+
+**Project conventions (independent of version — always apply):**
+
+- Language: TypeScript only — no `.js`/`.jsx` in `app/`, `components/`, `lib/`
+- `tsconfig`: `strict: true`, `noUncheckedIndexedAccess: true`, `noFallthroughCasesInSwitch: true`
+- Lint / format: ESLint (`next/core-web-vitals`) + Prettier; pre-commit fails on either
+- App Router only (no Pages Router for new code)
+
+### Protocol (BLOCKING when violated)
+
+1. **Detect** the installed Next.js / React major.minor from `package.json` at the start of work. Record in design notes or PR description.
+2. **Compare to training cutoff**. Evergreen content in this skill (App Router architecture, Server vs Client boundary, `_components/` privacy, a11y bar, `useTransition` for Server Actions, fetch caching primitives — *as concepts*) applies broadly.
+3. **If the installed version is newer than your confident training** OR you are about to use a specific feature, config key, default behavior, or import path you are not 100% sure remains stable in that version: **MUST verify via official docs before writing code**.
+   - Next.js: https://nextjs.org/docs (use WebFetch tool for the specific page)
+   - React: https://react.dev
+   - TanStack Query / Vitest / MSW: their respective official sites
+4. **Particularly version-volatile** (always re-verify): `fetch` cache defaults, `next.config.{js,ts}` schema, Server Action signature, `<Image>` / `next/font` props, route segment config (`export const dynamic`, `revalidate`, `runtime`).
+5. **Never invent** feature names, config keys, default values from training data. When uncertain, WebFetch → read → code. If WebFetch fails or docs are ambiguous, escalate via `inbox/` rather than guess.
+6. **Record verification** in PR description: e.g., `Verified against Next.js 16.2 § Data Fetching (2026-05-11)`. Roastmaster & codex use this to scope their review.
 
 ## Canonical commands
 
