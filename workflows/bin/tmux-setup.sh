@@ -51,9 +51,19 @@ if [[ ! -x "${LAUNCH_SCRIPT}" ]]; then
 fi
 
 # --- Idempotent session guard ---
+# If the session already exists, do not attempt `tmux attach-session`. /setup-team
+# is invoked from the user's Claude Code session — which itself runs inside tmux
+# in the normal flow — and tmux refuses to attach a session from inside another
+# session (it would print "sessions should be nested with care" and bail).
+# Print the attach hint instead and exit success; idempotent re-runs of /setup-team
+# should NOT re-spawn workers blindly.
 if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
-  echo "Session '${SESSION_NAME}' already exists. Attaching..."
-  tmux attach-session -t "${SESSION_NAME}"
+  echo "Session '${SESSION_NAME}' already exists — leaving panes intact."
+  if [[ -n "${TMUX:-}" ]]; then
+    echo "Switch to it from inside this tmux session with:  tmux switch-client -t ${SESSION_NAME}"
+  else
+    echo "Attach with:  tmux attach -t ${SESSION_NAME}"
+  fi
   exit 0
 fi
 
@@ -86,13 +96,13 @@ tmux select-pane -t "${SESSION_NAME}:team.4" -T "worker-review (The Roastmaster)
 # Bash 3-compatible (macOS ships bash 3.2; no associative arrays via `declare -A`).
 for pane_idx in 1 2 3 4; do
   case "$pane_idx" in
-    1) persona="pixel-wizard" ;;
-    2) persona="persistence-paladin" ;;
-    3) persona="what-if-witch" ;;
-    4) persona="the-roastmaster" ;;
+    1) persona="pixel-wizard";        pane_name="worker-fe" ;;
+    2) persona="persistence-paladin"; pane_name="worker-be" ;;
+    3) persona="what-if-witch";       pane_name="worker-qa" ;;
+    4) persona="the-roastmaster";     pane_name="worker-review" ;;
   esac
   tmux_target="${SESSION_NAME}:team.${pane_idx}"
-  "${LAUNCH_SCRIPT}" "${tmux_target}" "${persona}" || {
+  "${LAUNCH_SCRIPT}" "${tmux_target}" "${persona}" "${pane_name}" || {
     echo "ERROR: worker-launch.sh failed for pane ${pane_idx} (${persona})" >&2
     exit 1
   }

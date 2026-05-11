@@ -300,17 +300,20 @@ Two workers can be in `tickets/in-progress/` simultaneously (different IDs). The
 
 ```json
 {
+  "counters": { "T": 42, "RV": 7, "BL": 19 },
   "panes": {
-    "main":          { "persona": "technoking",          "pid": 12345 },
-    "worker-be":     { "persona": "persistence-paladin", "pid": 12346 },
-    "worker-fe":     { "persona": "pixel-wizard",        "pid": 12347 },
-    "worker-qa":     { "persona": "what-if-witch",       "pid": 12348 },
-    "worker-review": { "persona": "the-roastmaster",     "pid": 12349 }
-  },
-  "counters": { "T":  42, "RV": 7, "BL": 19 },
-  "updated_at": "2026-05-11T14:30:00+09:00"
+    "worker-be":     { "persona": "persistence-paladin", "pid": 12346, "pane_id": "claude-team:team.2" },
+    "worker-fe":     { "persona": "pixel-wizard",        "pid": 12347, "pane_id": "claude-team:team.1" },
+    "worker-qa":     { "persona": "what-if-witch",       "pid": 12348, "pane_id": "claude-team:team.3" },
+    "worker-review": { "persona": "the-roastmaster",     "pid": 12349, "pane_id": "claude-team:team.4" }
+  }
 }
 ```
+
+- **Keys are pane names** (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`) — stable identifiers that survive persona renames.
+- `pid` is the **tmux pane PID** (the pane's first process — usually the shell that forked `claude`). It tracks pane liveness, not claude's process directly.
+- `pane_id` is the tmux target (e.g. `claude-team:team.2`) for `tmux send-keys`/`select-pane`.
+- `main` (Technoking) is **not** tracked here — the user's primary pane is implicit.
 
 Counter increment: read → +1 → write, encapsulated by `ticket-publish.sh`. `RR-`, `RESCUE-`, `HANDOFF-`, `INBOX-` prefixes do not consume counters.
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # worker-launch.sh — launch a headless claude instance in a tmux pane with a persona attached
-# Usage: worker-launch.sh <pane-id> <persona-slug> [--initial-task <ticket-id>]
+# Usage: worker-launch.sh <pane-id> <persona-slug> <pane-name> [--initial-task <ticket-id>]
+#   pane-id     tmux target (e.g. "claude-team:team.2")
+#   persona-slug agents/<slug>.md filename without .md (e.g. "persistence-paladin")
+#   pane-name   stable identifier used as registry.json key (e.g. "worker-be")
 # Exit codes: 0=ok 1=generic 2=preflight 3=lock 4=bad-args
 set -euo pipefail
 IFS=$'\n\t'
@@ -43,19 +46,22 @@ fm_field() {
 }
 
 # Update registry panes using jq (preferred) or python3 fallback.
+# Keys by pane-name (worker-be, worker-fe, …) so downstream commands can
+# tabulate `pane | persona | pid` directly from the map. See ticket-protocol
+# § Counter management.
 update_registry_panes() {
-  local slug="$1" pane_id="$2" pid="$3"
+  local pane_name="$1" persona="$2" pane_id="$3" pid="$4"
   local tmp="${REGISTRY}.$$"
   if command -v jq &>/dev/null; then
-    jq --arg slug "$slug" --arg pane "$pane_id" --arg pid "$pid" \
-      '.panes[$slug] = {pane_id: $pane, pid: ($pid | tonumber)}' \
+    jq --arg name "$pane_name" --arg persona "$persona" --arg pane_id "$pane_id" --arg pid "$pid" \
+      '.panes[$name] = {persona: $persona, pid: ($pid | tonumber), pane_id: $pane_id}' \
       "$REGISTRY" > "$tmp"
   elif command -v python3 &>/dev/null; then
-    python3 - "$REGISTRY" "$tmp" "$slug" "$pane_id" "$pid" <<'PYEOF'
+    python3 - "$REGISTRY" "$tmp" "$pane_name" "$persona" "$pane_id" "$pid" <<'PYEOF'
 import sys, json
-src, dst, slug, pane_id, pid = sys.argv[1:]
+src, dst, name, persona, pane_id, pid = sys.argv[1:]
 data = json.load(open(src))
-data.setdefault("panes", {})[slug] = {"pane_id": pane_id, "pid": int(pid)}
+data.setdefault("panes", {})[name] = {"persona": persona, "pid": int(pid), "pane_id": pane_id}
 json.dump(data, open(dst, "w"), indent=2)
 PYEOF
   else
@@ -66,12 +72,13 @@ PYEOF
 
 # ---------- arg parse --------------------------------------------------------
 
-[[ $# -lt 2 ]] && die_args "Usage: worker-launch.sh <pane-id> <persona-slug> [--initial-task <ticket-id>]"
+[[ $# -lt 3 ]] && die_args "Usage: worker-launch.sh <pane-id> <persona-slug> <pane-name> [--initial-task <ticket-id>]"
 
 PANE_ID="$1"
 SLUG="$2"
+PANE_NAME="$3"
 INITIAL_TASK=""
-shift 2
+shift 3
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -82,6 +89,8 @@ done
 
 # Validate pane-id format (e.g. 6:0.0 or worker-be)
 [[ "$PANE_ID" =~ ^[a-zA-Z0-9:._-]+$ ]] || die_args "Invalid pane-id: $PANE_ID"
+# Validate pane-name (kebab identifier).
+[[ "$PANE_NAME" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || die_args "Invalid pane-name: $PANE_NAME"
 
 PERSONA_FILE="${AGENTS_DIR}/${SLUG}.md"
 [[ -f "$PERSONA_FILE" ]] || die_pre "Persona file not found: $PERSONA_FILE"
@@ -134,13 +143,29 @@ BOOTSTRAP_TASK="${INITIAL_TASK:-$DEFAULT_BOOTSTRAP}"
 
 # ---------- launch -----------------------------------------------------------
 
-# VERIFY: confirm flags against \`claude --help\` in stage 9 smoke test.
-# Assumed signature based on Claude Code conventions:
-#   claude --print --append-system-prompt "<persona-body>" "<first-task>"
-# If flags differ, /setup-team's preflight will surface the exact error.
-# NOTE: model flag assumed --model <model>. Adjust if CLI differs.
+# Verified against `claude --help` (Claude Code 2.1.x):
+#   --dangerously-skip-permissions   bypass permission prompts (required for headless workers)
+#   --model <alias>                  e.g. "sonnet", "opus"
+#   --append-system-prompt-file <p>  persona body loaded from file (avoids tmux send-keys
+#                                    shell-quoting issues with multi-KB markdown)
+#   [prompt]                         positional first user message (bootstrap polling loop)
+#
+# The persona body is persisted to .claude-team/.runtime/<slug>.prompt so tmux send-keys
+# only transmits a short command string. The runtime/ dir is created on demand and is
+# overwritten on each launch.
 
-LAUNCH_CMD="claude --model ${MODEL} --append-system-prompt $(printf '%q' "$SYSTEM_PROMPT") $(printf '%q' "$BOOTSTRAP_TASK")"
+RUNTIME_DIR="${CLAUDE_TEAM_DIR}/.runtime"
+mkdir -p "$RUNTIME_DIR"
+PROMPT_FILE="${RUNTIME_DIR}/${SLUG}.prompt"
+printf '%s' "$SYSTEM_PROMPT" > "$PROMPT_FILE"
+
+# Resolve to absolute path — the pane's shell may have a different cwd than this script.
+case "$PROMPT_FILE" in
+  /*) ABS_PROMPT_FILE="$PROMPT_FILE" ;;
+   *) ABS_PROMPT_FILE="$(pwd)/${PROMPT_FILE}" ;;
+esac
+
+LAUNCH_CMD="claude --dangerously-skip-permissions --model ${MODEL} --append-system-prompt-file $(printf '%q' "$ABS_PROMPT_FILE") $(printf '%q' "$BOOTSTRAP_TASK")"
 
 tmux send-keys -t "$PANE_ID" "$LAUNCH_CMD" Enter
 
@@ -152,7 +177,7 @@ PANE_PID="$(tmux display-message -t "$PANE_ID" -p '#{pane_pid}' 2>/dev/null)" \
 # ---------- update registry --------------------------------------------------
 
 acquire_lock
-update_registry_panes "$SLUG" "$PANE_ID" "$PANE_PID"
+update_registry_panes "$PANE_NAME" "$SLUG" "$PANE_ID" "$PANE_PID"
 release_lock
 
-echo "launched: ${SLUG} pane=${PANE_ID} pid=${PANE_PID}"
+echo "launched: ${SLUG} pane=${PANE_NAME} target=${PANE_ID} pid=${PANE_PID}"

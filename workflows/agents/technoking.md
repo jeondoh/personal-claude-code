@@ -208,9 +208,9 @@ Workers are headless `claude` instances in separate panes.
 
 **Standard pane names**: `main` (Technoking), `worker-be` (Persistence Paladin), `worker-fe` (Pixel Wizard), `worker-qa` (What-If Witch), `worker-review` (The Roastmaster).
 
-**Dispatch** (prefer `tmux_pane_id` from registry over pane name):
+**Dispatch** (look up `pane_id` from registry by pane name):
 ```bash
-PANE_ID=$(jq -r '.workers."persistence-paladin".tmux_pane_id' .claude-team/workers/registry.json)
+PANE_ID=$(jq -r '.panes."worker-be".pane_id' .claude-team/workers/registry.json)
 tmux send-keys -t "$PANE_ID" \
   "claude -p \"$(cat .claude-team/tickets/queue/T-0042-avatar.md)\"" Enter
 ```

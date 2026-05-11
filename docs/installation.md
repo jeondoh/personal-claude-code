@@ -148,7 +148,7 @@ CLAUDE_TEAM_SKIP_VERIFY=1 claude ...
 | 증상 | 해결 |
 |---|---|
 | `/codex:status` fails | `/codex:setup` 재실행. rate limit 이면 잠시 대기. API 키·경로 환경변수 확인. |
-| `worker-launch.sh: claude --print not found` | `claude --help` 로 실제 flag 확인 후 `worker-launch.sh` L107 VERIFY 마커 수정. 9단계 스모크 테스트에서 공식 검증. |
+| 워커가 permission 프롬프트에서 멈춤 | `worker-launch.sh` 가 `--dangerously-skip-permissions` 를 함께 넘기는지 확인. 0.1.5 부터 기본 포함. |
 | tmux 세션 충돌 | `tmux kill-session -t claude-team` 후 `/setup-team` 재실행. |
 | `.claude-team/.counter.lock` 락 충돌 | `rmdir .claude-team/.counter.lock` 후 재시도. 락이 오래됐을 때 발생. |
 | stop-verification 이 매 turn 빌드 — 너무 느림 | `CLAUDE_TEAM_SKIP_VERIFY=1` 으로 임시 비활성화. |

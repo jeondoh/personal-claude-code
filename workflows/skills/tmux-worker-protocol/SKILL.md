@@ -40,10 +40,21 @@ Stored in `.claude-team/workers/registry.json` after `/setup-team`.
 
 ## Headless launch
 
-Each worker pane runs `claude` non-interactively with a persona-loaded prompt. The launch is encapsulated by `worker-launch.sh` (the plugin's `bin/` directory is added to PATH by Claude Code; call scripts by bare name, never with `workflows/scripts/...` paths and never via symlinks):
+Each worker pane runs `claude` interactively (so it can poll continuously) with a persona-loaded prompt and permission prompts disabled. The launch is encapsulated by `worker-launch.sh` (the plugin's `bin/` directory is added to PATH by Claude Code; call scripts by bare name, never with `workflows/scripts/...` paths and never via symlinks). What the script does:
 
-- The script `cd`s into the worktree, sets `CLAUDE_PANE=<pane-name>` so the worker can identify itself, and starts `claude` with the persona's system prompt loaded from `workflows/agents/<persona>.md`.
-- **Exact CLI flags (headless mode, agent loading) are owned by `worker-launch.sh`** — when Claude Code's headless API changes, only that script updates. Other skills and personas do not embed CLI flags.
+1. Strip frontmatter from `agents/<slug>.md` and persist the persona body to `.claude-team/.runtime/<slug>.prompt` (avoids tmux `send-keys` quoting problems on multi-KB markdown).
+2. `tmux send-keys` the launch command into the target pane:
+   ```
+   claude --dangerously-skip-permissions \
+     --model <alias-from-persona-frontmatter> \
+     --append-system-prompt-file <abs-path-to-.runtime/<slug>.prompt> \
+     '<bootstrap-task>'
+   ```
+3. Capture the pane's PID via `tmux display-message -p '#{pane_pid}'` and write `{persona, pid, pane_id}` to `.claude-team/workers/registry.json` keyed by **pane name** (`worker-be`, `worker-fe`, …), atomically (temp → mv, lock-protected).
+
+`--dangerously-skip-permissions` is **required** for headless workers — without it, every Bash/Edit tool call stalls on a permission prompt with no human to approve.
+
+**Exact CLI flags are owned by `worker-launch.sh`** — when Claude Code's headless API changes, only that script updates. Other skills and personas do not embed CLI flags.
 
 The worker's first action on launch:
 

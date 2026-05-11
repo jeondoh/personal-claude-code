@@ -23,41 +23,39 @@ Invoke `/codex:status`. Result not `ready` → emit halt message and stop.
 **Step 2 — Create `.claude-team/` directory tree** (skip existing dirs)
 ```
 tickets/{queue,in-progress,done,cancelled}   reviews/   inbox/
-rescues/   backlog/   handoff/   archive/
+rescues/   backlog/   handoff/   archive/    workers/
 ```
+The `.runtime/` subdir is created on demand by `worker-launch.sh` — do not create it here.
 See ticket-protocol § Directory Layout.
 
 **Step 3 — Write `.claude-team/config.yml`** (skip if file already exists)
+Persona keys use **hyphens** to match the agent filenames (`agents/spec-shaman.md` etc.).
 ```yaml
 project_name: personal-claude
-plugins: { workflows: true, stack_kotlin_spring: false, stack_nextjs: false }
+plugins: { workflows: true, stack-kotlin-spring: false, stack-nextjs: false }
 personas:
-  technoking:          { model: sonnet, pane: main }
-  spec_shaman:         { model: sonnet, pane: subagent }
-  galaxy_brain:        { model: opus,   pane: subagent }
-  persistence_paladin: { model: sonnet, pane: worker-be }
-  pixel_wizard:        { model: sonnet, pane: worker-fe }
-  what_if_witch:       { model: sonnet, pane: worker-qa }
-  the_roastmaster:     { model: opus,   pane: worker-review }
+  technoking:           { model: sonnet, pane: main }
+  spec-shaman:          { model: sonnet, pane: subagent }
+  galaxy-brain:         { model: opus,   pane: subagent }
+  persistence-paladin:  { model: sonnet, pane: worker-be }
+  pixel-wizard:         { model: sonnet, pane: worker-fe }
+  what-if-witch:        { model: sonnet, pane: worker-qa }
+  the-roastmaster:      { model: opus,   pane: worker-review }
 ```
 
-**Step 4 — Initialize `workers/registry.json`** (skip if panes non-empty)
+**Step 4 — Initialize `workers/registry.json`** (skip if file exists with non-empty `panes`)
 ```json
 { "counters": { "T": 0, "RV": 0, "BL": 0 }, "panes": {} }
 ```
 
-**Step 5 — Launch tmux worker panes**
-Call `tmux-setup.sh` (plugin's `bin/` is in PATH; call by name, do NOT use `workflows/scripts/...` paths or create symlinks) → 4 panes: `worker-be`, `worker-fe`, `worker-qa`, `worker-review`.
-See tmux-worker-protocol § Pane Layout.
-If script absent (stage 6 not yet complete): log warning, skip steps 5–7, advise rerun after stage 6.
+**Step 5 — Launch tmux worker panes + headless workers**
+Call `tmux-setup.sh` (plugin's `bin/` is in PATH — call by bare name, do NOT use `workflows/scripts/...` paths or create symlinks). The script creates the `claude-team` session, splits 5 panes (`main`, `worker-fe`, `worker-be`, `worker-qa`, `worker-review`), and **invokes `worker-launch.sh` per worker pane internally** — it handles everything in Steps 5–7 as one atomic operation. Re-runs are idempotent: if `claude-team` already exists, the script exits without re-spawning.
+See tmux-worker-protocol § Pane Layout and § Headless Launch.
 
-**Step 6 — Attach personas to panes**
-For each worker pane: `worker-launch.sh <pane-id> <persona-slug>` (bare name; PATH resolves to the installed plugin's `bin/`).
-See tmux-worker-protocol § Headless Launch for CLI flags and VERIFY marker.
-
-**Step 7 — Update `workers/registry.json` panes**
-Record `{ pid, pane_id, persona }` for each launched pane. Atomic write (temp → mv).
+`worker-launch.sh` writes each pane's `{persona, pid, pane_id}` into `workers/registry.json` keyed by pane name (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`), atomically (temp → mv) and protected by `.counter.lock`.
 See ticket-protocol § Counter Lock.
+
+If `tmux-setup.sh` is absent (e.g. plugin install glitch): emit `"WARNING: tmux-setup.sh not found. Dirs and registry initialized. Reinstall the workflows plugin and rerun /setup-team."` and stop after Step 4.
 
 ## Delegation
 
@@ -79,4 +77,4 @@ worker-review  the-roastmaster      12348   alive
 Next: /show-team  or  /feat <request>
 ```
 
-Scripts missing: `"WARNING: tmux-setup.sh not found. Dirs and registry initialized. Rerun after stage 6."`
+Scripts missing: `"WARNING: tmux-setup.sh not found. Dirs and registry initialized. Reinstall the workflows plugin and rerun /setup-team."`
