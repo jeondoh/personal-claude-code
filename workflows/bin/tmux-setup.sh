@@ -83,15 +83,14 @@ tmux select-pane -t "${SESSION_NAME}:team.4" -T "worker-review (The Roastmaster)
 # Pane indices after splits: 0=main, 1=worker-fe, 2=worker-be, 3=worker-qa, 4=worker-review
 # main (pane 0) is left for the user; no headless claude there.
 
-declare -A PANE_PERSONA=(
-  [1]="pixel-wizard"
-  [2]="persistence-paladin"
-  [3]="what-if-witch"
-  [4]="the-roastmaster"
-)
-
+# Bash 3-compatible (macOS ships bash 3.2; no associative arrays via `declare -A`).
 for pane_idx in 1 2 3 4; do
-  persona="${PANE_PERSONA[$pane_idx]}"
+  case "$pane_idx" in
+    1) persona="pixel-wizard" ;;
+    2) persona="persistence-paladin" ;;
+    3) persona="what-if-witch" ;;
+    4) persona="the-roastmaster" ;;
+  esac
   tmux_target="${SESSION_NAME}:team.${pane_idx}"
   "${LAUNCH_SCRIPT}" "${tmux_target}" "${persona}" || {
     echo "ERROR: worker-launch.sh failed for pane ${pane_idx} (${persona})" >&2
