@@ -48,37 +48,56 @@ A 200-line PR with 1 commit that mixes refactor + feature + tests will earn BLOC
 ### Message format (Conventional Commits)
 
 ```
-<type>(<scope>): <subject>
+<type>(<scope>): <subject — 한국어>
 
-<body>
+<body — 한국어>
 
 <footer>
 ```
 
-- **type**: `feat | fix | refactor | test | docs | chore | perf | build | ci`
-- **scope**: optional, lowercase, single word — typically a module name (`auth`, `payments`, `ui`)
-- **subject**: imperative mood, ≤ 72 chars, no trailing period
-- **body**: WHY, not WHAT. Wrap at 80 chars. Empty if subject is self-explanatory.
-- **footer**: `Refs: T-0042`, `Closes: T-0042`, `Co-Authored-By: ...`
+- **type** (English, fixed enum): `feat | fix | refactor | test | docs | chore | perf | build | ci`
+- **scope** (English, optional): lowercase, single word — typically a module name (`auth`, `payments`, `ui`)
+- **subject** (**Korean**): imperative mood, ≤ 72 chars (Korean chars count as 1 char each for budgeting; aim for line that renders ≤ 72 columns), no trailing period
+- **body** (**Korean**): WHY, not WHAT. Wrap at ~80 columns. Empty if subject is self-explanatory.
+- **footer** (English keys): `Refs: T-0042`, `Closes: T-0042`, `Co-Authored-By: <name> <email>`
 
 Every commit on a ticket branch must reference the ticket: `Refs: T-NNNN` (or `Closes:` for the merge commit).
+
+### Language policy
+
+User-facing artifacts in this commit (subject + body) **must be Korean** — the user reads `git log` directly. Programmatic / tooling-facing tokens stay English:
+
+- ✅ Korean: subject, body
+- ✅ English: `<type>`, `<scope>`, footer keys (`Refs:`, `Closes:`, `Co-Authored-By:`), ticket IDs, file paths, code symbols
+- ❌ Never: English subject/body for a normal feature commit. Exception only when the change is verbatim a foreign-language artifact (e.g., editing English docs).
+
+Same rule applies to PR title and body (see § Pull Requests below).
 
 ### Examples
 
 ```
-feat(payments): add idempotency key to charge endpoint
+feat(payments): 결제 엔드포인트에 멱등성 키 추가
 
-Charge requests retried by the client previously created duplicate
-ledger entries. Idempotency key (UUIDv4 from client) is now stored
-in `payment_attempts` and returned charges are deduped within 24h.
+클라이언트 재시도 요청이 ledger에 중복 항목을 만들던 문제 해결.
+멱등성 키(클라이언트 발급 UUIDv4)를 payment_attempts에 저장,
+24h 내 동일 키 재요청은 기존 결제 결과를 그대로 반환하도록 변경.
 
 Refs: T-0118
 ```
 
 ```
-fix(auth): reject expired refresh tokens at validation
+fix(auth): 만료된 refresh token 검증 단계에서 거절
 
 Refs: T-0124
+```
+
+```
+refactor(orders): OrderService 의존성 주입을 생성자 방식으로 통일
+
+런타임 주입(@Autowired 필드)이 테스트에서 mock 주입 누락을 유발했음.
+모든 협력자를 생성자 인자로 받도록 정리. 동작 변화 없음.
+
+Refs: T-0205
 ```
 
 ### Forbidden
@@ -92,31 +111,35 @@ Refs: T-0124
 
 ### Title
 
-`<type>(<scope>): <subject>` — same format as commit subject. ≤ 72 chars.
+`<type>(<scope>): <subject — 한국어>` — same format as commit subject. ≤ 72 chars. Language policy identical to commit (see § Commits / Language policy).
 
-### Description (required sections)
+### Description (required sections, Korean body)
+
+Section headers are Korean (user reads directly on GitHub). Technical enum tokens (e.g., `APPROVE`, `BLOCKING`, `AC-001`, `BL-0042`) stay English.
 
 ```markdown
-## Summary
-1–3 bullets. What changed and why (one sentence each).
+## 요약
+1–3개 불릿. 무엇이 어떻게 바뀌었는지·왜 (한 줄씩).
 
-## Acceptance Criteria
-- [ ] AC-001: <text from PRD>
+## 인수 기준 (Acceptance Criteria)
+- [ ] AC-001: <PRD 인용>
 - [ ] AC-002: ...
 
-(small/no-PRD tickets: link the ticket file under `.claude-team/tickets/done/`)
+(small/no-PRD 티켓: `.claude-team/tickets/done/` 의 티켓 파일 링크)
 
-## Tests
-- Unit: <count or "n/a">
-- Integration: <count or "n/a">
-- Acceptance (What-If Witch): <count or "n/a">
-- E2E: <count or "n/a">
+## 테스트
+- 단위 (Unit): <개수 또는 "n/a">
+- 통합 (Integration): <개수 또는 "n/a">
+- 인수 (Acceptance, What-If Witch): <개수 또는 "n/a">
+- E2E: <개수 또는 "n/a">
 
-## Codex review
-- /codex:adversarial-review run: <yes/no, link or paste-of-result-id>
+## Codex 리뷰
+- /codex:adversarial-review 실행: <yes/no, 링크 또는 result ID>
+- verdict: <APPROVE | COMMENT | BLOCKING>
+- 보고서: `.claude-team/reviews/RR-T-NNNN-<round>.md`
 
-## Out of scope (filed)
-- BL-NNNN: <one line>
+## 범위 외 (Out of scope, 별도 티켓)
+- BL-NNNN: <한 줄 요약>
 ```
 
 ### Size

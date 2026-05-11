@@ -18,8 +18,8 @@
 
 | 항목 | 규칙 |
 |---|---|
-| 본문 언어 — 사용자 산출물 | **한국어** (PRD, Design Doc, ADR, Diagnose, Handoff, Review report). 사용자가 직접 읽음. |
-| 본문 언어 — 그 외 | 영어 (페르소나, 스킬, 워커 ticket, inbox JSON, 코드, 커맨드). 압축 우선. |
+| 본문 언어 — 사용자 산출물 | **한국어** (PRD, Design Doc, ADR, Diagnose, Handoff, Review report, **commit subject·body, PR title·body, codex review 결과 요약**). 사용자가 직접 읽음. |
+| 본문 언어 — 그 외 | 영어 (페르소나 본문, 스킬, 워커 ticket, inbox JSON, 코드, 커맨드, conventional commits `<type>(<scope>):` prefix, footer keys `Refs:`/`Closes:`/`Co-Authored-By:`). 압축 우선. |
 | YAML frontmatter | 영어 keys/enums (프로그램틱 파싱). |
 | 타임스탬프 | KST (UTC+9), ISO 8601 with `+09:00`. Date-only `YYYY-MM-DD`. |
 | Ticket ID | 4자리 zero-pad: `T-0042`, `RV-0007`, `BL-0019`. 9999 초과 시 5자리 자동 확장. |
