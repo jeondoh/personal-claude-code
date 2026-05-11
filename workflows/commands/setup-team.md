@@ -48,12 +48,18 @@ personas:
 { "counters": { "T": 0, "RV": 0, "BL": 0 }, "panes": {} }
 ```
 
-**Step 5 — Launch tmux worker panes + headless workers**
-Call `tmux-setup.sh` (plugin's `bin/` is in PATH — call by bare name, do NOT use `workflows/scripts/...` paths or create symlinks). The script creates the `claude-team` session, splits 5 panes (`main`, `worker-fe`, `worker-be`, `worker-qa`, `worker-review`), and **invokes `worker-launch.sh` per worker pane internally** — it handles everything in Steps 5–7 as one atomic operation. Re-runs are idempotent: if `claude-team` already exists, the script exits without re-spawning.
-See tmux-worker-protocol § Pane Layout and § Headless Launch.
+**Step 5 — Launch tmux session + claude in every pane**
+Call `tmux-setup.sh` (plugin's `bin/` is in PATH — call by bare name, do NOT use `workflows/scripts/...` paths or create symlinks). The script:
 
-`worker-launch.sh` writes each pane's `{persona, pid, pane_id}` into `workers/registry.json` keyed by pane name (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`), atomically (temp → mv) and protected by `.counter.lock`.
-See ticket-protocol § Counter Lock.
+- Creates the `claude-team` session **rooted at the user's current working directory** (`pwd` at /setup-team invocation time). All panes inherit this cwd.
+- Splits 5 panes in this order: `main` (pane 0) → `worker-review` (pane 1) → `worker-fe` (pane 2) → `worker-be` (pane 3) → `worker-qa` (pane 4).
+- Launches `claude --dangerously-skip-permissions` in **every pane** (including `main`) via `worker-launch.sh`.
+  - `main` (Technoking) gets a short Korean welcome listing the common slash commands; user then types here.
+  - Worker panes get a one-time persona greeting + enter a silent polling loop. No visible per-poll output.
+- Writes each worker pane's `{persona, pid, pane_id}` into `workers/registry.json` keyed by pane name (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`), atomically and lock-protected. `main` is NOT tracked — it's the user's pane and implicit.
+
+Re-runs are idempotent: if `claude-team` already exists, the script prints an attach hint and exits.
+See tmux-worker-protocol § Pane Layout and § Headless Launch.
 
 If `tmux-setup.sh` is absent (e.g. plugin install glitch): emit `"WARNING: tmux-setup.sh not found. Dirs and registry initialized. Reinstall the workflows plugin and rerun /setup-team."` and stop after Step 4.
 
@@ -65,16 +71,17 @@ If `tmux-setup.sh` is absent (e.g. plugin install glitch): emit `"WARNING: tmux-
 ## Expected Output
 
 ```
-/setup-team complete
+/setup-team complete (cwd: /path/to/your/project)
 
-Pane           Persona              PID     Status
--------------  -------------------  ------  ------
-worker-be      persistence-paladin  12345   alive
-worker-fe      pixel-wizard         12346   alive
-worker-qa      what-if-witch        12347   alive
-worker-review  the-roastmaster      12348   alive
+Pane            Persona              PID     Status
+--------------  -------------------  ------  ------
+main            technoking           12344   alive  (interactive, user-facing)
+worker-review   the-roastmaster      12345   alive
+worker-fe       pixel-wizard         12346   alive
+worker-be       persistence-paladin  12347   alive
+worker-qa       what-if-witch        12348   alive
 
-Next: /show-team  or  /feat <request>
+Next: type a request in the main pane — e.g. /feat <request> or /task <request>
 ```
 
 Scripts missing: `"WARNING: tmux-setup.sh not found. Dirs and registry initialized. Reinstall the workflows plugin and rerun /setup-team."`

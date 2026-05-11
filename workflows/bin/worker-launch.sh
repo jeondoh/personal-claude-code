@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# worker-launch.sh — launch a headless claude instance in a tmux pane with a persona attached
-# Usage: worker-launch.sh <pane-id> <persona-slug> <pane-name> [--initial-task <ticket-id>]
+# worker-launch.sh — launch a claude instance in a tmux pane with a persona attached.
+# Two modes:
+#   - main pane (pane-name=main, persona=technoking): interactive Tech Lead with a
+#     short welcome; not tracked in registry; no polling loop.
+#   - worker pane (worker-be/fe/qa/review): silent polling loop with a one-time
+#     persona-specific greeting from the persona's `idle_greeting:` frontmatter.
+#
+# Usage: worker-launch.sh <pane-id> <persona-slug> <pane-name> [--initial-task <text>]
 #   pane-id     tmux target (e.g. "claude-team:team.2")
 #   persona-slug agents/<slug>.md filename without .md (e.g. "persistence-paladin")
-#   pane-name   stable identifier used as registry.json key (e.g. "worker-be")
+#   pane-name   stable identifier — "main" or "worker-*"
 # Exit codes: 0=ok 1=generic 2=preflight 3=lock 4=bad-args
 set -euo pipefail
 IFS=$'\n\t'
 
 CLAUDE_TEAM_DIR="${CLAUDE_TEAM_DIR:-.claude-team}"
-# Self-locate: this script lives in <plugin-root>/bin/, persona files in <plugin-root>/agents/.
-# Works regardless of cwd (worker runs in user project dir, not plugin dir).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 AGENTS_DIR="${PLUGIN_ROOT}/agents"
@@ -22,10 +26,8 @@ die()      { echo "ERROR: $*" >&2; exit 1; }
 die_pre()  { echo "PREFLIGHT: $*" >&2; exit 2; }
 die_args() { echo "ARGS: $*" >&2; exit 4; }
 
-# Acquire advisory counter lock; retry up to 30 times with 100ms sleep.
 acquire_lock() {
-  local lock="${CLAUDE_TEAM_DIR}/.counter.lock"
-  local i=0
+  local lock="${CLAUDE_TEAM_DIR}/.counter.lock" i=0
   while ! mkdir "$lock" 2>/dev/null; do
     i=$(( i + 1 ))
     [[ $i -ge 30 ]] && { echo "ERROR: lock timeout" >&2; exit 3; }
@@ -34,21 +36,23 @@ acquire_lock() {
 }
 release_lock() { rmdir "${CLAUDE_TEAM_DIR}/.counter.lock" 2>/dev/null || true; }
 
-# Strip YAML frontmatter (between first pair of ---) from stdin.
 strip_frontmatter() {
   awk '/^---/{if(f==0){f=1;next}else{f=2;next}} f==2{print}' "$1"
 }
 
-# Read a frontmatter field from a markdown file.
-# Usage: fm_field <file> <key>
+# Read a frontmatter field; strips surrounding quotes. Empty if absent.
 fm_field() {
-  grep -m1 "^${2}:" "$1" | cut -d':' -f2- | sed 's/^ *//' | tr -d "'\""
+  grep -m1 "^${2}:" "$1" 2>/dev/null | cut -d':' -f2- | sed 's/^ *//' | sed 's/^"//;s/"$//' | sed "s/^'//;s/'\$//"
 }
 
-# Update registry panes using jq (preferred) or python3 fallback.
-# Keys by pane-name (worker-be, worker-fe, …) so downstream commands can
-# tabulate `pane | persona | pid` directly from the map. See ticket-protocol
-# § Counter management.
+# Resolve to absolute path. Pane shell may have a different cwd than this script.
+to_abs() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+     *) printf '%s/%s' "$(pwd)" "$1" ;;
+  esac
+}
+
 update_registry_panes() {
   local pane_name="$1" persona="$2" pane_id="$3" pid="$4"
   local tmp="${REGISTRY}.$$"
@@ -72,7 +76,7 @@ PYEOF
 
 # ---------- arg parse --------------------------------------------------------
 
-[[ $# -lt 3 ]] && die_args "Usage: worker-launch.sh <pane-id> <persona-slug> <pane-name> [--initial-task <ticket-id>]"
+[[ $# -lt 3 ]] && die_args "Usage: worker-launch.sh <pane-id> <persona-slug> <pane-name> [--initial-task <text>]"
 
 PANE_ID="$1"
 SLUG="$2"
@@ -87,9 +91,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate pane-id format (e.g. 6:0.0 or worker-be)
 [[ "$PANE_ID" =~ ^[a-zA-Z0-9:._-]+$ ]] || die_args "Invalid pane-id: $PANE_ID"
-# Validate pane-name (kebab identifier).
 [[ "$PANE_NAME" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || die_args "Invalid pane-name: $PANE_NAME"
 
 PERSONA_FILE="${AGENTS_DIR}/${SLUG}.md"
@@ -99,85 +101,114 @@ PERSONA_FILE="${AGENTS_DIR}/${SLUG}.md"
 # ---------- preflight --------------------------------------------------------
 
 command -v tmux &>/dev/null || die_pre "tmux not found in PATH"
-tmux has-session 2>/dev/null       || die_pre "no tmux session active"
-tmux select-pane -t "$PANE_ID" &>/dev/null \
-  || die_pre "tmux pane not found: $PANE_ID"
+tmux has-session 2>/dev/null || die_pre "no tmux session active"
+tmux select-pane -t "$PANE_ID" &>/dev/null || die_pre "tmux pane not found: $PANE_ID"
 
-# ---------- build persona prompt ---------------------------------------------
+# ---------- assemble system prompt -------------------------------------------
 
 MODEL="$(fm_field "$PERSONA_FILE" model)"
-[[ -z "$MODEL" ]] && MODEL="sonnet"   # safe default
+[[ -z "$MODEL" ]] && MODEL="sonnet"
 
 PERSONA_BODY="$(strip_frontmatter "$PERSONA_FILE")"
 SYSTEM_PROMPT="${PERSONA_BODY}
 
 You are ${SLUG}. Before acting: read CLAUDE.md, your persona file (${PERSONA_FILE}), and your assigned skills."
 
-read -r -d '' DEFAULT_BOOTSTRAP <<EOF || true
-You are now in idle polling mode for ${SLUG}. Follow tmux-worker-protocol § Polling cycle.
+# ---------- assemble first-message (mode-specific) ---------------------------
+# main pane: short user-facing welcome. Worker panes: silent polling loop with
+# a one-time persona greeting read from `idle_greeting:` frontmatter.
 
-Polling protocol (REPEAT until a ticket appears — do not stop after one poll):
+if [[ "$PANE_NAME" == "main" ]]; then
+  read -r -d '' DEFAULT_BOOTSTRAP <<EOF || true
+이 메시지는 사용자에게 출력하는 환영 인사다. 정확히 한 번 다음 텍스트만 출력하고 사용자 입력을 기다린다. 추가 설명·다른 동작 없음.
 
-Step 1. Execute this Bash block (use the Bash tool, timeout 320000ms). The plugin's bin/ directory is in PATH, so call \`ticket-poll.sh\` by name:
+━━ Technoking 작업대 ━━
+워커 4명 (worker-review · worker-fe · worker-be · worker-qa) 백그라운드 폴링 중.
 
-  for i in \$(seq 1 10); do
+자주 쓰는 명령:
+  /feat <요청>   — 전체 라이프사이클 (PRD → 설계 → 구현 → 리뷰 → 머지)
+  /task <요청>   — 작은 작업 (1-2 파일, 단일 영역)
+  /design <요청> — PRD · 설계 문서만
+  /status        — 워커 진행 보드
+  /show-team     — 팀 로스터 + PID
+  /abort <T-NNNN>— 진행 중 ticket 중단
+
+여기서 명령 주면 워커들에게 분배된다. 다른 페인은 들여다보지 말고 이 작업대에서 명령만.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+위 텍스트를 출력한 직후 무조건 사용자 입력 대기. 자동 동작·자동 polling X.
+EOF
+else
+  GREETING="$(fm_field "$PERSONA_FILE" idle_greeting)"
+  [[ -z "$GREETING" ]] && GREETING="[${SLUG}] 가동. ticket 대기 중."
+  read -r -d '' DEFAULT_BOOTSTRAP <<EOF || true
+You are ${SLUG} running headless in tmux pane "${PANE_NAME}". You are in SILENT idle polling mode.
+
+ONE-TIME GREETING (first turn only): output exactly the following line and nothing else — no preamble, no narration:
+${GREETING}
+
+THEN enter SILENT polling mode. While idle, you MUST:
+- Not narrate, explain, or comment.
+- Not echo poll iteration counts or timestamps.
+- Not produce any text response between polling cycles.
+- Only emit visible text when (a) the one-time greeting above, (b) a real ticket appears (announce ticket ID + title), or (c) an unrecoverable error.
+
+POLLING BLOCK (call the Bash tool, timeout 600000ms). The block itself runs silently — only the final non-"none:" line is captured:
+
+  for i in \$(seq 1 18); do
     out=\$(ticket-poll.sh ${SLUG} 2>&1)
-    echo "[poll \$i @ \$(TZ=Asia/Seoul date +%H:%M:%S)] \$out"
     case "\$out" in
       none:*) sleep 30 ;;
-      *) break ;;
+      *) printf '%s\n' "\$out"; break ;;
     esac
   done
 
-Step 2. Inspect the final output:
-  - If a non-"none:" line appeared → run \`ticket-poll.sh ${SLUG} --claim\` to atomically move the ticket to in-progress/, read it from .claude-team/tickets/in-progress/, then begin work per ticket-protocol.
-  - If ALL 10 polls returned "none:" → repeat Step 1 (run the Bash block again). Continue indefinitely.
+After the Bash call returns:
+- If output is empty or starts with "none:" → re-run the polling block. Stay silent. No commentary.
+- If output starts with "queue for" → a ticket is available. Run \`ticket-poll.sh ${SLUG} --claim\`, read the claimed ticket from .claude-team/tickets/in-progress/, announce one line like "[${SLUG}] received <ticket-id>: <title>", then begin work per ticket-protocol.
 
-Constraints while idle:
-- Do NOT run slash commands (none defined for headless workers).
-- Do NOT explore the codebase, edit files, or call tools other than Bash polling.
-- Do NOT exit the polling loop. Only break out when a real ticket appears.
+Allowed tools while idle: Bash (polling only). Do NOT run slash commands, do NOT explore code, do NOT edit files until a ticket is claimed.
 EOF
+fi
 
 BOOTSTRAP_TASK="${INITIAL_TASK:-$DEFAULT_BOOTSTRAP}"
 
-# ---------- launch -----------------------------------------------------------
-
-# Verified against `claude --help` (Claude Code 2.1.x):
-#   --dangerously-skip-permissions   bypass permission prompts (required for headless workers)
-#   --model <alias>                  e.g. "sonnet", "opus"
-#   --append-system-prompt-file <p>  persona body loaded from file (avoids tmux send-keys
-#                                    shell-quoting issues with multi-KB markdown)
-#   [prompt]                         positional first user message (bootstrap polling loop)
-#
-# The persona body is persisted to .claude-team/.runtime/<slug>.prompt so tmux send-keys
-# only transmits a short command string. The runtime/ dir is created on demand and is
-# overwritten on each launch.
+# ---------- persist prompts to files (avoid tmux send-keys UTF-8 quoting) ----
+# bash 3.2's `printf '%q'` mangles multi-byte chars on `tmux send-keys` typing.
+# Both system prompt and first message go to files; pane shell reads them at
+# exec time via `--append-system-prompt-file` and `"$(cat ...)"`.
 
 RUNTIME_DIR="${CLAUDE_TEAM_DIR}/.runtime"
 mkdir -p "$RUNTIME_DIR"
 PROMPT_FILE="${RUNTIME_DIR}/${SLUG}.prompt"
+TASK_FILE="${RUNTIME_DIR}/${SLUG}.task"
 printf '%s' "$SYSTEM_PROMPT" > "$PROMPT_FILE"
+printf '%s' "$BOOTSTRAP_TASK" > "$TASK_FILE"
 
-# Resolve to absolute path — the pane's shell may have a different cwd than this script.
-case "$PROMPT_FILE" in
-  /*) ABS_PROMPT_FILE="$PROMPT_FILE" ;;
-   *) ABS_PROMPT_FILE="$(pwd)/${PROMPT_FILE}" ;;
-esac
+ABS_PROMPT_FILE="$(to_abs "$PROMPT_FILE")"
+ABS_TASK_FILE="$(to_abs "$TASK_FILE")"
 
-LAUNCH_CMD="claude --dangerously-skip-permissions --model ${MODEL} --append-system-prompt-file $(printf '%q' "$ABS_PROMPT_FILE") $(printf '%q' "$BOOTSTRAP_TASK")"
+# ---------- launch -----------------------------------------------------------
+# Verified against `claude --help` (Claude Code 2.1.x):
+#   --dangerously-skip-permissions   bypass permission prompts
+#   --model <alias>                  e.g. "sonnet", "opus"
+#   --append-system-prompt-file <p>  persona body from file
+#   "$(cat <task-file>)"             first user message read at pane exec time
+
+LAUNCH_CMD="claude --dangerously-skip-permissions --model ${MODEL} --append-system-prompt-file $(printf '%q' "$ABS_PROMPT_FILE") \"\$(cat $(printf '%q' "$ABS_TASK_FILE"))\""
 
 tmux send-keys -t "$PANE_ID" "$LAUNCH_CMD" Enter
 
-# Give the process a moment to start, then capture its PID via tmux pane_pid.
 sleep 0.5
 PANE_PID="$(tmux display-message -t "$PANE_ID" -p '#{pane_pid}' 2>/dev/null)" \
   || die "Could not read pane PID for $PANE_ID"
 
-# ---------- update registry --------------------------------------------------
+# ---------- update registry (workers only; main is implicit) -----------------
 
-acquire_lock
-update_registry_panes "$PANE_NAME" "$SLUG" "$PANE_ID" "$PANE_PID"
-release_lock
+if [[ "$PANE_NAME" != "main" ]]; then
+  acquire_lock
+  update_registry_panes "$PANE_NAME" "$SLUG" "$PANE_ID" "$PANE_PID"
+  release_lock
+fi
 
 echo "launched: ${SLUG} pane=${PANE_NAME} target=${PANE_ID} pid=${PANE_PID}"

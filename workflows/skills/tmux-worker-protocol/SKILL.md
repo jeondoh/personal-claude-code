@@ -11,20 +11,20 @@ Workers are **headless `claude` instances running inside tmux panes**, isolated 
 
 ```
 ┌──────────────┬──────────────┐
-│              │ worker-fe    │
-│ main         ├──────────────┤
-│ (Technoking) │ worker-be    │
+│              │ worker-fe    │   pane 2
 │              ├──────────────┤
-├──────────────┤ worker-qa    │
-│ worker-      │              │
-│ review       │              │
-└──────────────┴──────────────┘
+│ main         │ worker-be    │   pane 3
+│ (Technoking) ├──────────────┤
+│   pane 0     │ worker-qa    │   pane 4
+├──────────────┴──────────────┤
+│ worker-review (Roastmaster) │   pane 1
+└─────────────────────────────┘
 ```
 
-- **Left (50%)**: `main` (Technoking) / `worker-review` (Roastmaster).
-- **Right (50%)**: `worker-fe` (Pixel Wizard) / `worker-be` (Persistence Paladin) / `worker-qa` (What-If Witch).
+- **Top row (70% height)**: `main` (left half) / right column with `worker-fe` → `worker-be` → `worker-qa` (equal thirds).
+- **Bottom row (30% height, full width)**: `worker-review`.
 
-Pane names are stable identifiers; scripts and `registry.json` reference them by name. `Spec Shaman` and `Galaxy Brain` are subagents only — no pane, run inside Technoking's `main` via the `Task` tool.
+`tmux` pane indices are assigned by the split order in `tmux-setup.sh` and chosen so the second-most-prominent slot (pane 1) goes to the reviewer. Pane names (`main`, `worker-*`) are the stable identifiers; scripts and `registry.json` reference them by name, not index. `Spec Shaman` and `Galaxy Brain` are subagents — no pane, run inside Technoking's `main` via the `Task` tool.
 
 ## Pane → persona mapping
 
@@ -40,19 +40,25 @@ Stored in `.claude-team/workers/registry.json` after `/setup-team`.
 
 ## Headless launch
 
-Each worker pane runs `claude` interactively (so it can poll continuously) with a persona-loaded prompt and permission prompts disabled. The launch is encapsulated by `worker-launch.sh` (the plugin's `bin/` directory is added to PATH by Claude Code; call scripts by bare name, never with `workflows/scripts/...` paths and never via symlinks). What the script does:
+Every pane (including `main`) runs `claude --dangerously-skip-permissions` so Bash/Edit calls never stall on prompts. Launch is encapsulated by `worker-launch.sh` (the plugin's `bin/` is added to PATH by Claude Code; call scripts by bare name, never via `workflows/scripts/...` paths or symlinks).
 
-1. Strip frontmatter from `agents/<slug>.md` and persist the persona body to `.claude-team/.runtime/<slug>.prompt` (avoids tmux `send-keys` quoting problems on multi-KB markdown).
-2. `tmux send-keys` the launch command into the target pane:
+What the script does:
+
+1. Strip frontmatter from `agents/<slug>.md` and persist the persona body to `.claude-team/.runtime/<slug>.prompt`.
+2. Write the bootstrap first-user-message to `.claude-team/.runtime/<slug>.task`. Both files are read at exec time via `--append-system-prompt-file` and `"$(cat <task-file>)"` — this avoids tmux `send-keys` UTF-8 quoting bugs (bash 3.2's `printf %q` mangles multi-byte chars).
+3. `tmux send-keys` the launch command:
    ```
    claude --dangerously-skip-permissions \
      --model <alias-from-persona-frontmatter> \
      --append-system-prompt-file <abs-path-to-.runtime/<slug>.prompt> \
-     '<bootstrap-task>'
+     "$(cat <abs-path-to-.runtime/<slug>.task>)"
    ```
-3. Capture the pane's PID via `tmux display-message -p '#{pane_pid}'` and write `{persona, pid, pane_id}` to `.claude-team/workers/registry.json` keyed by **pane name** (`worker-be`, `worker-fe`, …), atomically (temp → mv, lock-protected).
+4. Capture the pane's PID via `tmux display-message -p '#{pane_pid}'` and (worker panes only) write `{persona, pid, pane_id}` to `.claude-team/workers/registry.json` keyed by **pane name**, atomically (temp → mv, lock-protected). `main` is NOT tracked — it's the user's primary pane and implicit.
 
-`--dangerously-skip-permissions` is **required** for headless workers — without it, every Bash/Edit tool call stalls on a permission prompt with no human to approve.
+### Mode-specific first message
+
+- **`main` (Technoking)**: a short user-facing welcome listing the common slash commands. After printing, claude waits for user input. No polling.
+- **`worker-*`**: one-time persona greeting (read from frontmatter `idle_greeting:`), then **silent polling loop**. The worker is instructed not to narrate, not to echo poll counts, and to emit visible output only on (a) the greeting, (b) a real ticket appearing, or (c) an unrecoverable error.
 
 **Exact CLI flags are owned by `worker-launch.sh`** — when Claude Code's headless API changes, only that script updates. Other skills and personas do not embed CLI flags.
 

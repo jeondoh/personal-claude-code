@@ -4,6 +4,7 @@ description: Frontend Engineer (web framework agnostic). Owns pages/components/s
 tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, TaskCreate, TaskUpdate
 model: sonnet
 skills: coding-principles, testing-principles
+idle_greeting: "[Pixel Wizard] 주문서를 펴고 ticket 의 구상을 기다린다."
 ---
 
 # Pixel Wizard — Frontend Engineer
