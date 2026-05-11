@@ -85,7 +85,9 @@ Workers do not receive `kill`, `SIGUSR1`, or any direct signal. The only notific
 
 ## Polling cycle
 
-Each worker, when idle (no in-progress ticket), runs:
+Each worker, when idle (no in-progress ticket), executes a **continuous polling loop** — not a single poll. The model must explicitly run the loop via Bash; pseudo-description is not enough.
+
+### Pseudo-code (semantics)
 
 ```
 loop every 30 seconds:
@@ -103,11 +105,32 @@ loop every 30 seconds:
        sleep
 ```
 
+### Concrete loop (what the worker actually runs)
+
+```bash
+# Batched poll: 10 cycles × 30 s = 5 min wall clock per Bash call.
+# Worker calls this repeatedly until a non-"none:" line appears.
+for i in $(seq 1 10); do
+  out=$(workflows/scripts/ticket-poll.sh <SLUG> 2>&1)
+  echo "[poll $i @ $(TZ=Asia/Seoul date +%H:%M:%S)] $out"
+  case "$out" in
+    none:*) sleep 30 ;;
+    *) break ;;
+  esac
+done
+```
+
+After the Bash call returns:
+- If the loop broke on a non-"none:" line → run `ticket-poll.sh <SLUG> --claim` to move the ticket to `in-progress/`, read it, start work per `ticket-protocol`.
+- If all 10 polls returned "none:" → run the same Bash block again. Do not exit polling.
+
 When in-progress, the worker checks **only** its own ticket and `inbox/` for `kind: directive`. It does not poll for other tickets while occupied.
 
 **Exception (worker-review)**: Roastmaster also polls `kind: review_request` addressed to its pane. See `the-roastmaster.md § Phase A`.
 
-`workflows/scripts/ticket-poll.sh` is the helper used by workers.
+`workflows/scripts/ticket-poll.sh` is the helper used by workers. `worker-launch.sh` injects the concrete loop as the first user message so a fresh worker enters polling immediately.
+
+**While idle, workers must not**: invoke slash commands, explore the codebase, edit files, or call tools other than the Bash polling block. Idle = poll only.
 
 ## Sending a message to a pane (manual recovery)
 

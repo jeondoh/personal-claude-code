@@ -100,7 +100,33 @@ SYSTEM_PROMPT="${PERSONA_BODY}
 
 You are ${SLUG}. Before acting: read CLAUDE.md, your persona file (${PERSONA_FILE}), and your assigned skills."
 
-BOOTSTRAP_TASK="${INITIAL_TASK:-Idle for ticket assignment. Poll .claude-team/tickets/queue/ via ticket-poll.sh for tasks assigned to you.}"
+read -r -d '' DEFAULT_BOOTSTRAP <<EOF || true
+You are now in idle polling mode for ${SLUG}. Follow tmux-worker-protocol § Polling cycle.
+
+Polling protocol (REPEAT until a ticket appears — do not stop after one poll):
+
+Step 1. Execute this Bash block (use the Bash tool, timeout 320000ms):
+
+  for i in \$(seq 1 10); do
+    out=\$(workflows/scripts/ticket-poll.sh ${SLUG} 2>&1)
+    echo "[poll \$i @ \$(TZ=Asia/Seoul date +%H:%M:%S)] \$out"
+    case "\$out" in
+      none:*) sleep 30 ;;
+      *) break ;;
+    esac
+  done
+
+Step 2. Inspect the final output:
+  - If a non-"none:" line appeared → run \`workflows/scripts/ticket-poll.sh ${SLUG} --claim\` to atomically move the ticket to in-progress/, read it from .claude-team/tickets/in-progress/, then begin work per ticket-protocol.
+  - If ALL 10 polls returned "none:" → repeat Step 1 (run the Bash block again). Continue indefinitely.
+
+Constraints while idle:
+- Do NOT run slash commands (none defined for headless workers).
+- Do NOT explore the codebase, edit files, or call tools other than Bash polling.
+- Do NOT exit the polling loop. Only break out when a real ticket appears.
+EOF
+
+BOOTSTRAP_TASK="${INITIAL_TASK:-$DEFAULT_BOOTSTRAP}"
 
 # ---------- launch -----------------------------------------------------------
 
