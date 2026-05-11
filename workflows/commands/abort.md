@@ -1,0 +1,98 @@
+---
+description: Safely cancel in-progress tickets, terminate workers, and clean up worktrees
+---
+
+# /abort
+
+Cancel one or all active tickets, signal workers to stop, and reclaim worktrees. No committed work is lost; only uncommitted changes in the worktree are abandoned.
+
+---
+
+## Pre-flight
+
+Verify all three gates in order. Halt on first failure.
+
+1. `.claude-team/config.yml` exists → if not: **halt** — "run `/setup-team` first"
+2. `/codex:status` reports ready → if not: **halt** — "run `/codex:setup` first"
+3. Every pane PID in `workers/registry.json` is alive → if not: **halt** — "dead worker detected; run `/setup-team` to restart panes"
+
+---
+
+## Arguments
+
+```
+/abort <ticket-id>        # cancel a single ticket
+/abort --all-active       # cancel all tickets currently in tickets/in-progress/
+/abort <ticket-id> --force  # skip worker-response wait (immediate worktree removal)
+```
+
+`<ticket-id>` must match `T-\d{4,}` or `RV-\d{4,}`. Any other format → **halt** with format error.
+
+---
+
+## Execution
+
+### Step 1 — Validate ticket state
+
+Confirm `<ticket-id>.md` exists in `.claude-team/tickets/in-progress/`.
+
+- Not found in `in-progress/` → **halt** — "ticket `<id>` is not in-progress; check `tickets/queue/` or `tickets/done/`"
+- For `--all-active`: collect all files in `in-progress/`; proceed for each.
+
+### Step 2 — Signal worker (directive)
+
+Technoking identifies the assigned worker pane via `workers/registry.json` (`assignee` field in ticket frontmatter → pane slug → PID).
+
+Technoking publishes a `kind: directive` inbox message (`ticket-protocol § type=inbox`) to `.claude-team/inbox/INBOX-<ts>-<pane>.md`:
+
+```yaml
+kind: directive
+ticket_id: <id>
+action: abort
+instruction: "Abort current work. Commit nothing. Return to idle."
+```
+
+**Without `--force`**: wait up to 60 s for worker ack (`processed: true`); timeout → proceed and log.  
+**With `--force`**: skip wait; proceed immediately to Step 3.
+
+### Step 3 — Worktree removal
+
+Reclaim the git worktree associated with the ticket per `git-flow § worktree lifecycle`:
+
+```
+git worktree remove --force <worktree-path>
+```
+
+Worktree path is derived from `workers/registry.json` or ticket frontmatter `worktree` field.
+
+If worktree path is not found or already removed, log and continue.
+
+### Step 4 — Ticket cancellation
+
+Move ticket file from `tickets/in-progress/` → `tickets/cancelled/`.
+
+Append to ticket frontmatter:
+
+```yaml
+cancelled_at: <KST ISO-8601>
+cancel_reason: "user invoked /abort"
+```
+
+See `ticket-protocol § cancellation`.
+
+### Step 5 — Inbox cleanup
+
+For each processed directive message: set `processed: true` in the inbox file frontmatter. Do not delete (retain for audit). Per `ticket-protocol § inbox lifecycle`.
+
+---
+
+## Expected Output
+
+```
+[/abort complete]
+Cancelled : T-NNNN, T-MMMM   (or "none" if --all-active found nothing)
+Worktrees : removed <path>, <path>
+Timeouts  : <id> (worker did not ack within 60 s)  — omit line if none
+```
+
+If halted at pre-flight or argument validation, output the halt reason and corrective action.

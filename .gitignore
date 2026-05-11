@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# Claude team runtime (not tracked per CLAUDE.md)
+.claude-team/
+.worktrees/
+
+# Local Claude settings
+.claude/settings.local.json

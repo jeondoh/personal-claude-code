@@ -1,0 +1,23 @@
+{
+  "name": "workflows",
+  "description": "Stack-agnostic core: 7 personas, tmux pane orchestration, ticket protocol, git flow, codex adversarial-review bridge",
+  "version": "0.1.0",
+  "author": {
+    "name": "sideholic",
+    "url": "https://github.com/sideholic"
+  },
+  "homepage": "https://github.com/sideholic/personal-claude-code",
+  "repository": "https://github.com/sideholic/personal-claude-code.git",
+  "license": "MIT",
+  "keywords": [
+    "workflows",
+    "personas",
+    "tmux",
+    "parallel-workers",
+    "ticket-protocol",
+    "codex-rescue",
+    "orchestration",
+    "team",
+    "agentic-coding"
+  ]
+}

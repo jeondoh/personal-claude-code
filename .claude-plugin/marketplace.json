@@ -1,0 +1,81 @@
+{
+  "name": "personal-claude-code",
+  "owner": {
+    "name": "sideholic",
+    "url": "https://github.com/sideholic"
+  },
+  "metadata": {
+    "description": "Opinionated 7-persona team workflow for Claude Code — Tech Lead + 6 specialists, tmux parallel workers, codex auto-rescue, swappable stack-* plugins"
+  },
+  "plugins": [
+    {
+      "name": "workflows",
+      "source": "./workflows",
+      "strict": true,
+      "version": "0.1.0",
+      "description": "Stack-agnostic core: 7 personas, tmux pane orchestration, ticket protocol, git flow, codex adversarial-review bridge",
+      "author": {
+        "name": "sideholic",
+        "url": "https://github.com/sideholic"
+      },
+      "homepage": "https://github.com/sideholic/personal-claude-code",
+      "repository": "https://github.com/sideholic/personal-claude-code.git",
+      "license": "MIT",
+      "keywords": [
+        "workflows",
+        "personas",
+        "tmux",
+        "parallel-workers",
+        "ticket-protocol",
+        "codex-rescue",
+        "orchestration",
+        "team",
+        "agentic-coding"
+      ]
+    },
+    {
+      "name": "stack-kotlin-spring",
+      "source": "./stack-kotlin-spring",
+      "strict": true,
+      "version": "0.1.0",
+      "description": "Kotlin + Spring Boot stack pack — coding rules, data access patterns, testing skills, stop-verification hook",
+      "author": {
+        "name": "sideholic",
+        "url": "https://github.com/sideholic"
+      },
+      "homepage": "https://github.com/sideholic/personal-claude-code",
+      "repository": "https://github.com/sideholic/personal-claude-code.git",
+      "license": "MIT",
+      "keywords": [
+        "kotlin",
+        "spring-boot",
+        "backend",
+        "jpa",
+        "testing",
+        "stack-pack"
+      ]
+    },
+    {
+      "name": "stack-nextjs",
+      "source": "./stack-nextjs",
+      "strict": true,
+      "version": "0.1.0",
+      "description": "Next.js stack pack — frontend coding rules, data fetching patterns, testing skills, stop-verification hook",
+      "author": {
+        "name": "sideholic",
+        "url": "https://github.com/sideholic"
+      },
+      "homepage": "https://github.com/sideholic/personal-claude-code",
+      "repository": "https://github.com/sideholic/personal-claude-code.git",
+      "license": "MIT",
+      "keywords": [
+        "nextjs",
+        "react",
+        "typescript",
+        "frontend",
+        "testing",
+        "stack-pack"
+      ]
+    }
+  ]
+}

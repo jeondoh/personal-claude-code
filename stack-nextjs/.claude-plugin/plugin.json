@@ -1,0 +1,20 @@
+{
+  "name": "stack-nextjs",
+  "description": "Next.js stack pack — frontend coding rules, data fetching patterns, testing skills, stop-verification hook",
+  "version": "0.1.0",
+  "author": {
+    "name": "sideholic",
+    "url": "https://github.com/sideholic"
+  },
+  "homepage": "https://github.com/sideholic/personal-claude-code",
+  "repository": "https://github.com/sideholic/personal-claude-code.git",
+  "license": "MIT",
+  "keywords": [
+    "nextjs",
+    "react",
+    "typescript",
+    "frontend",
+    "testing",
+    "stack-pack"
+  ]
+}

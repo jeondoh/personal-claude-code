@@ -1,0 +1,20 @@
+{
+  "name": "stack-kotlin-spring",
+  "description": "Kotlin + Spring Boot stack pack — coding rules, data access patterns, testing skills, stop-verification hook",
+  "version": "0.1.0",
+  "author": {
+    "name": "sideholic",
+    "url": "https://github.com/sideholic"
+  },
+  "homepage": "https://github.com/sideholic/personal-claude-code",
+  "repository": "https://github.com/sideholic/personal-claude-code.git",
+  "license": "MIT",
+  "keywords": [
+    "kotlin",
+    "spring-boot",
+    "backend",
+    "jpa",
+    "testing",
+    "stack-pack"
+  ]
+}
