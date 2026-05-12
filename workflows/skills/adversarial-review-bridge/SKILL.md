@@ -73,14 +73,18 @@ Inbox messages with `kind: escalation_needed` and one of these reasons **do not*
 ## `error_signature` calculation
 
 ```
-error_signature = first 8 hex chars of SHA-1(<error_class>:<file>:<line>)
+error_signature = first 8 hex chars of SHA-1(<error_class>:<failing_component>)
 ```
 
-- `<error_class>`: error type or first non-whitespace stack-trace line (`NullPointerException`, `TypeError`, `compile_error`).
-- `<file>`: repo-relative path of the file at fault.
-- `<line>`: 1-based line number.
+- `<error_class>`: exception class or first non-whitespace stack-trace line (`NullPointerException`, `NoSuchBeanDefinitionException`, `TypeError`, `compile_error`).
+- `<failing_component>`: the bean name, test method name, or module that consistently fails — **NOT file:line**. File and line numbers change when the worker retries with different diagnostic commands (e.g., different `grep` flags), which breaks matching across attempts.
 
-If file/line cannot be determined, use `<error_class>:unknown:0` — these always count as **distinct** signatures (they never trigger auto-rescue because the signature changes between attempts).
+Examples:
+- `NoSuchBeanDefinitionException:ObjectMapper` → SHA-1 prefix → `a3f8b2e1`
+- `NullPointerException:UserService.login` → SHA-1 prefix → `b4c91d3f`
+- `TypeError:useAuthStore` → SHA-1 prefix → `c5da2e40`
+
+If the failing component cannot be determined, use `<error_class>:unknown` — these count as **distinct** signatures and never trigger auto-rescue (use time/attempt-based triggers instead; see worker personas).
 
 The worker computes the signature when emitting `kind: error_2x` and includes it in the inbox message. Technoking matches against the worker's previous `error_2x` for the same ticket.
 

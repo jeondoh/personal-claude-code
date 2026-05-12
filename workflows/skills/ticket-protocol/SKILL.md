@@ -64,7 +64,7 @@ author: technoking                      # persona slug
 id: T-0042
 type: work
 title: idempotency key on charge endpoint
-status: queued | in_progress | in_review | done | cancelled
+status: queued | in_progress | in_review | rescue_candidate | done | cancelled
 assignee: worker-be | worker-fe | worker-qa | unassigned
 complexity: small | medium | large
 parent_feature: feat/T-0040-charge-idempotency   # umbrella /feat ticket, optional
@@ -93,7 +93,7 @@ verdict: APPROVE | COMMENT | BLOCKING
 reviewer: roastmaster
 codex_review_id: <id-from-/codex:result>
 pattern_stuck: false                              # true if same BLOCKING as round-(N-1)
-error_signature: 8d3c9f1a                         # SHA-1 prefix(8) of <error_class>:<file>:<line>
+error_signature: 8d3c9f1a                         # SHA-1 prefix(8) of <error_class>:<failing_component>
 created: 2026-05-11T16:00:00+09:00
 ---
 ```
@@ -221,9 +221,12 @@ created: 2026-05-11T18:00:00+09:00
 **Work ticket**:
 ```
 queued → in_progress → in_review → done
+                ↘  rescue_candidate → in_progress (after rescue patch)
                 ↘  cancelled (any time)
 ```
 - `queued → in_progress`: worker moves file from `tickets/queue/` to `tickets/in-progress/` and creates `.worktrees/T-NNNN/`.
+- `in_progress → rescue_candidate`: worker hits auto-rescue trigger (same error twice, time limit, or attempt limit). Worker sets status, posts inbox `kind: error_2x`, stops work. File stays in `tickets/in-progress/`.
+- `rescue_candidate → in_progress`: Technoking dispatches rescue patch as `RV-NNNN` validation ticket. Worker resumes on rescue branch.
 - `in_progress → in_review`: worker pushes branch and posts inbox `kind: completion`. Technoking opens PR. **File stays in `tickets/in-progress/`; only the `status` field flips.** No separate `in-review/` directory.
 - `in_review → done`: PR merged. File moves to `tickets/done/`. Worktree removed.
 - `* → cancelled`: explicit `/abort` or scope reset.

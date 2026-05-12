@@ -95,7 +95,7 @@ There is **no direct messaging** between panes. All coordination is file-based.
 
 ### Worker → Technoking
 
-Worker writes to `.claude-team/inbox/INBOX-<ts>-<pane-name>.md`:
+Worker writes to `.claude-team/inbox/INBOX-<ts>-<pane-name>.json`:
 
 - `kind: progress` — status update mid-ticket
 - `kind: escalation_needed` — blocking issue requiring user or Galaxy Brain (see `ticket-protocol` for `reason` enum)

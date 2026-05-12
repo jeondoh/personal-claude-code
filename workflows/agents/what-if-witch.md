@@ -80,8 +80,10 @@ Stack-agnostic. Read project conventions in priority: (1) `CLAUDE.md` (test comm
 2. Run all acceptance tests — should now pass
 3. Run integration tests using project's setup
 4. Run E2E tests using project's framework
-5. If any fail: identify scope (single layer → that worker; cross-layer → Technoking with both scopes); set `status: escalation_needed`. **Increment `attempt_count` on each retry.**
-6. If all pass: report `ready-for-merge`
+5. If any fail: identify scope (single layer → that worker; cross-layer → Technoking with both scopes).
+   - Set ticket `status: escalation_needed`. **Increment `attempt_count` on each retry.**
+   - Post inbox `INBOX-<ts>-worker-qa.json` with `kind: escalation_needed`, `reason: other` (single-layer) or include both scopes in body. Technoking routes the fix directive to the responsible worker.
+6. If all pass: report `ready-for-merge`. Post inbox `INBOX-<ts>-worker-qa.json` with `kind: completion`.
 
 ### Rescue validation cycle (when ticket has `rescue_branch`)
 
@@ -95,12 +97,21 @@ Set `status: escalation_needed` when:
 - Cross-layer integration failure
 - Test infrastructure missing
 
-**Rescue trigger (auto)**: If the same test infrastructure or integration failure occurs **twice** with the same root cause:
-- Compute `error_signature` = SHA-1 prefix (8 chars) of `<error_class>:<file>:<line>`
-- Set `status: rescue_candidate`
-- Create `.claude-team/inbox/{ticket-id}.json` with `{ "reason": "test_loop", "error_signature": "...", "rev_count": 2 }`
+**Rescue trigger (auto)** — fire on **any** of the following:
+
+1. **Same error class twice**: Same exception class + failing test/component name in 2 consecutive `attempt_count` increments.
+   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_test_or_component>`. **Do NOT include file:line.**
+2. **Time limit**: Elapsed time since `started` > **20 minutes** with unresolved failure.
+3. **Attempt limit**: `attempt_count` ≥ **3** with ongoing failure.
+
+On trigger:
+- Set `status: rescue_candidate`, increment `attempt_count`
+- Create **`INBOX-<ts>-worker-qa.json`** (Technoking polls this pattern):
+  ```json
+  { "kind": "error_2x", "ticket": "T-NNNN", "reason": "test_loop|timeout|attempt_limit", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
+  ```
 - Stop work; Technoking invokes `/codex:rescue --background`; patch returns as `RV-NNNN-<slug>.md` (`type: review` § 4b, highest priority) with `rescue_branch` field
-- **If rescue patch validation also fails**: set `escalation_needed` (do not auto-rescue again).
+- **If rescue patch validation also fails**: post **`INBOX-<ts>-worker-qa.json`** with `kind: escalation_needed`, `reason: rescue_failed`. Do not auto-rescue again.
 
 ## Reporting Format
 

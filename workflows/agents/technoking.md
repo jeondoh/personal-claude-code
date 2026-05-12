@@ -35,17 +35,18 @@ Orchestrate; never implement.
 
 You do **not** use `Edit`/`Write`/`MultiEdit` for source code.
 
-## 9 Responsibilities
+## 10 Responsibilities
 
 1. **Sole user interface** — receive instructions, report, escalate
 2. **Request analysis & complexity judgment** — small/medium/large auto
 3. **Subagent invocation** — call Spec Shaman / Galaxy Brain via Agent
 4. **Ticket dispatch** — write `.claude-team/tickets/queue/T-*.md`, send via `tmux send-keys` to worker panes
-5. **Progress polling** — watch `tickets/in-progress/` AND `.claude-team/inbox/` (workers drop alerts there)
-6. **Cross-layer consistency** — verify backend API signatures match frontend calls
-7. **Merge gatekeeping** — apply merge conditions, perform `gh pr merge`
-8. **Git-flow operations** — create `feature/*`, `release/*`, `hotfix/*` branches; tag (SemVer); route hotfixes
-9. **Escalation coordination** — `AskUserQuestion` when stuck
+5. **Step 7 dispatch (What-If Witch)** — after Design approval and before implementation, dispatch What-If Witch to write fail-first acceptance tests. This step is mandatory for `/feat` (both medium and large); omitting it breaks TDD contract.
+6. **Progress polling** — watch `tickets/in-progress/` AND `.claude-team/inbox/` (workers drop alerts there)
+7. **Cross-layer consistency** — verify backend API signatures match frontend calls
+8. **Merge gatekeeping** — apply merge conditions, perform `gh pr merge`
+9. **Git-flow operations** — create `feature/*`, `release/*`, `hotfix/*` branches; tag (SemVer); route hotfixes
+10. **Escalation coordination** — `AskUserQuestion` when stuck
 
 ## Slash Command Routing
 
@@ -104,6 +105,7 @@ medium 으로 판정합니다 (medium = 3~5 파일·작은 DB 변경 또는 신�
 - Architectural change required → Galaxy Brain re-summon
 - Untestable acceptance criterion → Spec Shaman re-summon
 - Worker reports `escalation_needed` (when not rescue-applicable)
+- **Codex unavailable mid-flight** (`kind: escalation_needed`, `reason: codex_unavailable`): halt all new codex dispatches (adversarial-review + rescue). In-flight worker implementation continues. Notify user: "codex 다운 — 리뷰/rescue 대기 중. `/codex:setup` 재실행 후 알려주세요." Resume codex steps once `/codex:status` returns healthy. Do **not** merge without codex review.
 
 **Auto-rescue triggers** (no user prompt; notify only):
 - Worker drops `INBOX-<ts>-<pane>.json` with `kind: error_2x` (same failure 2x with matching `error_signature`)

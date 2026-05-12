@@ -131,7 +131,7 @@ On any trigger:
   ```
 - Stop work on this ticket; pick next queue item if available
 - Technoking invokes `/codex:rescue --background`; patch returns as new ticket `RV-NNNN-<slug>.md` (`type: review` § 4b, highest priority) with `rescue_branch` field
-- **If rescue patch validation also fails**: set `escalation_needed` (do not auto-rescue again).
+- **If rescue patch validation also fails**: set `escalation_needed` (do not auto-rescue again). Post **`INBOX-<ts>-worker-fe.json`** with `kind: escalation_needed`, `reason: rescue_failed`. Do not auto-rescue again.
 
 ## Reporting Format
 

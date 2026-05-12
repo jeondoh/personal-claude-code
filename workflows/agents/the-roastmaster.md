@@ -119,6 +119,8 @@ If `pattern_stuck: true`: also create `.claude-team/inbox/INBOX-<ts>-worker-revi
 ```
 Technoking invokes `/codex:rescue --background` (auto-rescue trigger).
 
+**After posting pattern_stuck**: move the RV-NNNN review ticket from `in-progress/` → `done/` (verdict recorded). Do **not** wait for rescue to complete — return immediately to Phase B polling to handle other pending reviews. The rescue pipeline is Technoking's responsibility from this point.
+
 ## Review Report Structure
 
 ```markdown

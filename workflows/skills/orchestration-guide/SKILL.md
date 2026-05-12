@@ -117,7 +117,11 @@ The following force a Stop even outside scheduled Stop points:
 - Mid-flight auto-escalation to `large` (see "Auto-escalation mid-flight").
 - 3rd consecutive review BLOCKING in step 9 (max review rounds reached).
 - Rescue validation fails (`reason: rescue_failed`).
-- Codex unavailable (`reason: codex_unavailable`) — pre-flight catches this; if it appears mid-flight, halt.
+- Codex unavailable (`reason: codex_unavailable`) — pre-flight catches this; if it appears mid-flight:
+  - **Halt** all new codex dispatches (adversarial-review + rescue). Do not attempt degraded-mode review.
+  - In-flight implementation workers **continue** (they don't depend on codex directly).
+  - Notify user immediately: "codex 다운 — PR 리뷰/rescue 대기 중. `/codex:setup` 재실행 후 알려주세요."
+  - Resume codex steps once `/codex:status` returns `ready`. **Do not merge without completed codex review.**
 
 ## Step-by-step operational notes
 
