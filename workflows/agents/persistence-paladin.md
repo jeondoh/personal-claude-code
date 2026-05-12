@@ -109,12 +109,22 @@ Set ticket `status: escalation_needed` (do not try to fix) when:
 
 Include `escalation_reason` in ticket. Technoking handles.
 
-**Rescue trigger (auto)**: If the same build/test failure occurs **twice** with the same root cause:
-- Compute `error_signature` = SHA-1 prefix (8 chars) of `<error_class>:<file>:<line>` (e.g., `NullPointerException:UserService.kt:42` → `a3f8b2e1`)
+**Rescue trigger (auto)** — fire on **any** of the following three conditions:
+
+1. **Same error class twice**: The same exception class + failing bean/test name appears in 2 consecutive `attempt_count` increments.
+   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_bean_or_test_name>`. **Do NOT include file:line** — those change across diagnostic iterations and break matching.
+   - Example: `NoSuchBeanDefinitionException:ObjectMapper` → `a3f8b2e1`
+
+2. **Time limit exceeded**: Elapsed time since `started` > **20 minutes** with any unresolved build/test failure.
+
+3. **Attempt limit**: `attempt_count` ≥ **3** with ongoing failure.
+
+On any trigger:
 - Set ticket `status: rescue_candidate`
-- Create alert `.claude-team/inbox/{ticket-id}.json`:
+- Increment `attempt_count` in ticket header
+- Create alert **`INBOX-<ts>-worker-be.json`** (exact filename format — Technoking polls this pattern):
   ```json
-  { "reason": "build_loop", "error_signature": "a3f8b2e1", "rev_count": 2 }
+  { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
   ```
 - Stop work on this ticket. Pick next queue item if available, else idle.
 - Technoking will invoke `/codex:rescue --background` and route the patch back as a new validation ticket `RV-NNNN-<slug>.md` (`type: review` § 4b, queue priority: highest) with `rescue_branch` field set.

@@ -112,10 +112,23 @@ Set `status: escalation_needed` when:
 - Required server endpoint signature undefined in Design Doc
 - Performance budget impossible without re-design
 
-**Rescue trigger (auto)**: If the same build/test failure occurs **twice** with the same root cause:
-- Compute `error_signature` = SHA-1 prefix (8 chars) of `<error_class>:<file>:<line>`
+**Rescue trigger (auto)** — fire on **any** of the following three conditions:
+
+1. **Same error class twice**: The same exception class + failing component name appears in 2 consecutive `attempt_count` increments.
+   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_component_or_test_name>`. **Do NOT include file:line** — those change across diagnostic iterations and break matching.
+   - Example: `TypeError:useAuthStore` → `b2c9d3e4`
+
+2. **Time limit exceeded**: Elapsed time since `started` > **20 minutes** with any unresolved build/test failure.
+
+3. **Attempt limit**: `attempt_count` ≥ **3** with ongoing failure.
+
+On any trigger:
 - Set ticket `status: rescue_candidate`
-- Create `.claude-team/inbox/{ticket-id}.json` with `{ "reason": "build_loop", "error_signature": "...", "rev_count": 2 }`
+- Increment `attempt_count` in ticket header
+- Create alert **`INBOX-<ts>-worker-fe.json`** (exact filename format — Technoking polls this pattern):
+  ```json
+  { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
+  ```
 - Stop work on this ticket; pick next queue item if available
 - Technoking invokes `/codex:rescue --background`; patch returns as new ticket `RV-NNNN-<slug>.md` (`type: review` § 4b, highest priority) with `rescue_branch` field
 - **If rescue patch validation also fails**: set `escalation_needed` (do not auto-rescue again).
