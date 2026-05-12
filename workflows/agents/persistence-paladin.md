@@ -56,7 +56,7 @@ Stack-agnostic. Read project conventions in priority: (1) `CLAUDE.md` (root), (2
 .worktrees/persistence-paladin/
 ```
 
-Never touch files outside this worktree. Push to your branch (`feature/T-{NNN}-{slug}`) when ready.
+Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slug}`) when ready.
 
 ## Workflow Algorithm (per ticket)
 
