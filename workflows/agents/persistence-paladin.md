@@ -80,14 +80,23 @@ Never touch files outside this worktree. Push to your branch (`feature/T-{NNN}-{
    - Run project's lint/format check (if configured)
    - Fix until all pass. **On each retry, increment ticket header `attempt_count`.**
 
-5. **Push**:
+5. **Push & PR**:
    - `git add` only target files; conventional commit msg
    - `git push origin feature/T-{NNN}-{slug}` (or `rescue/T-{NNN}` for validation)
+   - **Initial push** (no open PR yet): `gh pr create --repo <repo> --title "<ticket title>" --body "..."` — body must include: AC checklist, test plan, and paired PR link if cross-stack.
+   - **Review fix push** (PR already exists, responding to BLOCKING/SHOULD findings): post a PR comment summarizing what was addressed:
+     ```bash
+     gh pr comment {pr_number} --repo {repo} --body "..."
+     ```
+     Comment must include: which BLOCKING items were resolved (reference Roastmaster's item titles from the review comment), what exactly was changed per item (file, what changed, why), and quality check results (build/test/lint). Write in Korean.
 
 6. **Report**:
    - Update ticket: `status: ready-for-review`
    - Move: in-progress → done
    - Append "Investigation Notes" section
+   - Notify Technoking via inbox `.claude-team/inbox/INBOX-<ts>-worker-be.json`:
+     - Initial completion: `kind: completion` with `pr_url`, `branch`, `commit`
+     - Review fix: `kind: fix_pushed` with `pr_url`, `branch`, `commit`, `ticket_ref` (original T-NNN)
 
 ## Escalation Conditions
 

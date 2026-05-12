@@ -85,7 +85,23 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
    - Project's type-check, test (scoped), lint/format
    - Fix until all pass. **On each retry, increment ticket `attempt_count`.**
 
-7. **Push & Report** (same as Paladin)
+7. **Push & PR**:
+   - `git add` only target files; conventional commit msg
+   - `git push origin feature/T-{NNN}-{slug}` (or `rescue/T-{NNN}` for validation)
+   - **Initial push** (no open PR yet): `gh pr create --repo <repo> --title "<ticket title>" --body "..."` — body must include: AC checklist, test plan (typecheck/build/a11y), and paired PR link if cross-stack.
+   - **Review fix push** (PR already exists, responding to BLOCKING/SHOULD findings): post a PR comment summarizing what was addressed:
+     ```bash
+     gh pr comment {pr_number} --repo {repo} --body "..."
+     ```
+     Comment must include: which BLOCKING items were resolved (reference Roastmaster's item titles from the review comment), what exactly was changed per item (file, what changed, why), and quality check results (typecheck/build/lint/a11y). Write in Korean.
+   - Notify Technoking via inbox `.claude-team/inbox/INBOX-<ts>-worker-fe.json`:
+     - Initial completion: `kind: completion` with `pr_url`, `branch`, `commit`
+     - Review fix: `kind: fix_pushed` with `pr_url`, `branch`, `commit`, `ticket_ref` (original T-NNN)
+
+8. **Report**:
+   - Update ticket: `status: ready-for-review`
+   - Move: in-progress → done
+   - Append "Investigation Notes" section
 
 ## Escalation Conditions
 

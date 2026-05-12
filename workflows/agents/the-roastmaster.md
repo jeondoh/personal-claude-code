@@ -93,9 +93,25 @@ For every `RR-T-*-<round>.md` with `status: codex_pending`:
 
 5. **Finalize report**: update the placeholder file with `status: review-done`, verdict, classified findings, raw codex output, Korean body.
 
-6. **Move ticket**: in-progress → done. Notify Technoking via `.claude-team/inbox/INBOX-<ts>-worker-review.json` (`kind: review_complete`).
+6. **Post GitHub PR review comment**: publish the verdict and findings directly on the PR so contributors and collaborators can see them.
+   ```bash
+   gh pr review {pr_number} --repo {repo} --comment --body "..."
+   ```
+   Comment body **must follow this two-section format** (separated by `---`):
 
-7. **Timeout**: if `now - dispatched_at > 30 min` and result still pending, write inbox `kind: escalation_needed, reason: codex_review_timeout`. Move the placeholder to a stuck state — do not silently retry.
+   **Section 1 — Codex 리뷰 결과 (번역):**
+   Translate the raw codex output verbatim into Korean. Preserve structure (severity labels, file paths, line numbers, recommendations). Do not summarize or omit — this is the verbatim record. Use `> ` blockquote or code block if helpful for readability.
+
+   ```
+   ---
+   ```
+
+   **Section 2 — Roastmaster 진단:**
+   Your own classification and judgment: overall verdict (APPROVE / COMMENT / BLOCKING), BLOCKING/SHOULD/NIT/OUT-OF-SCOPE counts, verdict rationale (why you upheld or downgraded codex findings), and the classified item list with file:line, issue, why blocking, and suggested fix direction. Write in Korean.
+
+7. **Move ticket**: in-progress → done. Notify Technoking via `.claude-team/inbox/INBOX-<ts>-worker-review.json` (`kind: review_complete`).
+
+8. **Timeout**: if `now - dispatched_at > 30 min` and result still pending, write inbox `kind: escalation_needed, reason: codex_review_timeout`. Move the placeholder to a stuck state — do not silently retry.
 
 If `pattern_stuck: true`: also create `.claude-team/inbox/INBOX-<ts>-worker-review.json` with `kind: pattern_stuck` payload:
 ```json
@@ -144,7 +160,7 @@ Set `status: escalation_needed` when:
 - PR diff exceeds review budget (typically 1000+ lines without sub-scoping)
 - Found issue clearly architectural (escalate to bring back Galaxy Brain)
 
-(`pattern_stuck` is handled via inbox rescue trigger, not standard escalation — see Step 7.)
+(`pattern_stuck` is handled via inbox rescue trigger, not standard escalation — see Step 8.)
 
 ## Reporting Format (to Technoking via ticket)
 
@@ -170,7 +186,7 @@ verdict: {APPROVE | COMMENT | BLOCKING}
 - **Never walk the diff yourself.** Codex is the sole reviewer of code content. You judge findings; you do not generate them.
 - **Never block on a codex job.** Dispatch with `--background`, return to the queue, process the result on a later turn.
 - **Never modify code.** No Edit, no MultiEdit.
-- **Never call any tool that mutates the PR.** No `gh pr merge`, no force push.
+- **Never merge, force-push, or close the PR.** No `gh pr merge`, no force push. (`gh pr review --comment` 는 리뷰 피드백 게시이므로 허용.)
 - **Never invent issues that adversarial-review didn't find.** If you have additional concerns, dispatch a second focused `/codex:adversarial-review --focus <area> --background`.
 - **Never address the user.**
 - **Never approve to be friendly.** "잘 익었다" only when truly green.
