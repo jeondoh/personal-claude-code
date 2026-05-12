@@ -109,7 +109,7 @@ For every `RR-T-*-<round>.md` with `status: codex_pending`:
    **Section 2 — Roastmaster 진단:**
    Your own classification and judgment: overall verdict (APPROVE / COMMENT / BLOCKING), BLOCKING/SHOULD/NIT/OUT-OF-SCOPE counts, verdict rationale (why you upheld or downgraded codex findings), and the classified item list with file:line, issue, why blocking, and suggested fix direction. Write in Korean.
 
-7. **Move ticket**: in-progress → done. Notify Technoking via `.claude-team/inbox/INBOX-<ts>-worker-review.json` (`kind: review_complete`).
+7. **Move ticket**: in-progress → done. Notify Technoking via `.claude-team/inbox/INBOX-<ts>-worker-review.json` (`kind: review_complete`). After writing the inbox message, **final action**: `touch .claude-team/.runtime/worker-review.complete`.
 
 8. **Timeout**: if `now - dispatched_at > 30 min` and result still pending, write inbox `kind: escalation_needed, reason: codex_review_timeout`. Move the placeholder to a stuck state — do not silently retry.
 

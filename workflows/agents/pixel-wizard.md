@@ -62,7 +62,7 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 1. **Pickup** (same protocol as Paladin: read ticket, validate area is `frontend` or `fullstack`, move queue→in-progress, header includes `attempt_count: 1`)
    - **If ticket has `rescue_branch` field**: checkout that branch, validate patch, skip to quality verification.
 
-2. **Setup worktree**: `cd .worktrees/pixel-wizard/`; pull latest, branch off
+2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
 
 3. **Component-first development**:
    - Read Design Doc + UI specs
@@ -87,7 +87,7 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 
 7. **Push & PR**:
    - `git add` only target files; conventional commit msg
-   - `git push origin feature/T-{NNN}-{slug}` (or `rescue/T-{NNN}` for validation)
+   - `git push origin feat/T-{NNN}-{slug}` (or `rescue/T-{NNN}` for validation)
    - **Initial push** (no open PR yet): `gh pr create --repo <repo> --title "<ticket title>" --body "..."` — body must include: AC checklist, test plan (typecheck/build/a11y), and paired PR link if cross-stack.
    - **Review fix push** (PR already exists, responding to BLOCKING/SHOULD findings): post a PR comment summarizing what was addressed:
      ```bash
@@ -97,6 +97,7 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
    - Notify Technoking via inbox `.claude-team/inbox/INBOX-<ts>-worker-fe.json`:
      - Initial completion: `kind: completion` with `pr_url`, `branch`, `commit`
      - Review fix: `kind: fix_pushed` with `pr_url`, `branch`, `commit`, `ticket_ref` (original T-NNN)
+   - After writing the inbox message, **final action**: `touch .claude-team/.runtime/worker-fe.complete`
 
 8. **Report**:
    - Update ticket: `status: ready-for-review`
@@ -115,8 +116,9 @@ Set `status: escalation_needed` when:
 **Rescue trigger (auto)** — fire on **any** of the following three conditions:
 
 1. **Same error class twice**: The same exception class + failing component name appears in 2 consecutive `attempt_count` increments.
-   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_component_or_test_name>`. **Do NOT include file:line** — those change across diagnostic iterations and break matching.
+   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_component_or_test_name>`. **Do NOT include file:line** — those drift across diagnostic iterations and break matching.
    - Example: `TypeError:useAuthStore` → `b2c9d3e4`
+   - Implementation: `printf '<exception_class>:<component_or_test_name>' | sha1sum | cut -c1-8`
 
 2. **Time limit exceeded**: Elapsed time since `started` > **20 minutes** with any unresolved build/test failure.
 
@@ -125,13 +127,13 @@ Set `status: escalation_needed` when:
 On any trigger:
 - Set ticket `status: rescue_candidate`
 - Increment `attempt_count` in ticket header
-- Create alert **`INBOX-<ts>-worker-fe.json`** (exact filename format — Technoking polls this pattern):
+- Create alert **`INBOX-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)-worker-fe.json`** in `.claude-team/inbox/`:
   ```json
   { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
   ```
-- Stop work on this ticket; pick next queue item if available
-- Technoking invokes `/codex:rescue --background`; patch returns as new ticket `RV-NNNN-<slug>.md` (`type: review` § 4b, highest priority) with `rescue_branch` field
-- **If rescue patch validation also fails**: set `escalation_needed` (do not auto-rescue again). Post **`INBOX-<ts>-worker-fe.json`** with `kind: escalation_needed`, `reason: rescue_failed`. Do not auto-rescue again.
+- **Final action**: `touch .claude-team/.runtime/worker-fe.complete` (shell watchdog will kill this session and resume polling)
+- Do NOT continue work on this ticket. Technoking handles rescue dispatch. Patch returns as new ticket `RV-NNNN-<slug>.md` (`type: review` § 4b, highest priority) with `rescue_branch` field
+- **If rescue patch validation also fails**: post `INBOX-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)-worker-fe.json` with `kind: escalation_needed`, `reason: rescue_failed`. Do not auto-rescue again.
 
 ## Reporting Format
 
@@ -144,7 +146,7 @@ T-{NNN} 완료. 주문 안정.
 - 변경 파일: <count>
 - 추가 테스트: <count>
 - 커밋: <commit hashes>
-- 브랜치: feature/T-{NNN}-{slug}
+- 브랜치: feat/T-{NNN}-{slug}
 
 검증:
 - typecheck: PASS
@@ -159,7 +161,7 @@ T-{NNN} 완료. 주문 안정.
 
 ## Constraints
 
-- **Never modify files outside `.worktrees/pixel-wizard/`.**
+- **Never modify files outside your ticket's worktree (`.worktrees/T-{NNN}/`).**
 - **Never bypass the worktree.**
 - **Never skip type checking.**
 - **Never put secrets in client bundle.** Public/exposed env vars are public — audit before push.

@@ -56,7 +56,9 @@ Boundary is the rule, not "everything that's slow." Mocking your own service in 
 
 **Hard rule for data access**: repository implementations are **not unit tested with mocks**. Mocks pass schema mismatches, query bugs, and constraint violations through silently. Repository tests run against a real DB engine (Testcontainers / in-memory engine that matches dialect / dedicated test DB). See stack `data-access` and `testing-*` skills for stack-specific setup.
 
-**AI-generated query hazard**: AI-written SQL/JPQL/ORM code has elevated schema-hallucination risk. Roastmaster pattern-matches on this and will BLOCK if a data-access change has only mock-based tests.
+**Scope**: This rule applies only to NEW or MODIFIED repository methods within the ticket scope. A ticket that merely calls an existing unchanged repository method does not require adding Testcontainers tests for that method.
+
+**AI-generated query hazard**: AI-written SQL/JPQL/ORM code has elevated schema-hallucination risk. Roastmaster pattern-matches on this and will BLOCK if a NEW or MODIFIED data-access method has only mock-based tests.
 
 ## Fixtures and helpers
 
@@ -67,7 +69,9 @@ Boundary is the rule, not "everything that's slow." Mocking your own service in 
 
 ## What you must always test
 
-For any non-trivial function, cover:
+**Scope rule first**: Only write tests for NEW or MODIFIED code within the ticket's `files_in_scope`. Do not add tests for existing untouched code — that is scope creep (file a `BL-NNNN` if you spot a gap). The four categories below apply within that scope.
+
+For any NEW or MODIFIED non-trivial function, cover:
 
 1. **Happy path** — normal expected input.
 2. **Boundaries** — min, max, just-below, just-above, empty.

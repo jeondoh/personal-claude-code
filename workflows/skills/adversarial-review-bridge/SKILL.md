@@ -58,7 +58,7 @@ Technoking dispatches `/codex:rescue --background` (no user approval) when **any
 
 | Trigger | Detected by | Source |
 |---|---|---|
-| `error_2x` | Worker submits two `kind: error_2x` inbox messages with the same `error_signature` | Worker self-reports during build/test loops |
+| `error_2x` | Worker sends **one** `kind: error_2x` inbox message after self-detecting the same error twice. Technoking triggers rescue immediately on receiving it. | Worker self-reports during build/test loops |
 | `pattern_stuck` | Round-N review report has `pattern_stuck: true` | Roastmaster sets this when round-N BLOCKING repeats round-(N-1) BLOCKING in the same code area |
 
 ### Excluded — standard escalation instead
@@ -77,16 +77,17 @@ error_signature = first 8 hex chars of SHA-1(<error_class>:<failing_component>)
 ```
 
 - `<error_class>`: exception class or first non-whitespace stack-trace line (`NullPointerException`, `NoSuchBeanDefinitionException`, `TypeError`, `compile_error`).
-- `<failing_component>`: the bean name, test method name, or module that consistently fails — **NOT file:line**. File and line numbers change when the worker retries with different diagnostic commands (e.g., different `grep` flags), which breaks matching across attempts.
+- `<failing_component>`: the bean name, test method name, or module that consistently fails — **NOT file:line**. File and line numbers change when the worker retries, which breaks matching across attempts.
+- Implementation: `printf '<error_class>:<failing_component>' | sha1sum | cut -c1-8`
 
 Examples:
-- `NoSuchBeanDefinitionException:ObjectMapper` → SHA-1 prefix → `a3f8b2e1`
-- `NullPointerException:UserService.login` → SHA-1 prefix → `b4c91d3f`
-- `TypeError:useAuthStore` → SHA-1 prefix → `c5da2e40`
+- `NoSuchBeanDefinitionException:ObjectMapper` → `a3f8b2e1`
+- `NullPointerException:UserService.login` → `b4c91d3f`
+- `TypeError:useAuthStore` → `c5da2e40`
 
 If the failing component cannot be determined, use `<error_class>:unknown` — these count as **distinct** signatures and never trigger auto-rescue (use time/attempt-based triggers instead; see worker personas).
 
-The worker computes the signature when emitting `kind: error_2x` and includes it in the inbox message. Technoking matches against the worker's previous `error_2x` for the same ticket.
+The worker computes the signature after the second occurrence and includes it in the **single** `kind: error_2x` inbox message. Technoking triggers rescue immediately on receiving any `kind: error_2x` message — no second message required.
 
 ## Rescue dispatch — the 6-step pipeline
 

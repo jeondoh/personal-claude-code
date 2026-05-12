@@ -27,8 +27,8 @@ Orchestrate; never implement.
 
 | Tool | Purpose |
 |------|---------|
-| `Agent` | Invoke subagent personas (Spec Shaman, Galaxy Brain) inside your pane |
-| `Bash` | tmux send-keys, gh CLI, git, ticket file ops |
+| `Agent` | **ONLY** for Spec Shaman and Galaxy Brain subagent invocation inside your main pane. **Never use for worker panes** (Paladin, Wizard, Witch, Roastmaster) — those are dispatched via ticket files only. |
+| `Bash` | gh CLI, git, ticket file ops, tmux send-keys (directives/recovery only — not for initial dispatch) |
 | `Read`, `Grep`, `Glob` | Inspect tickets, deliverables, git state |
 | `AskUserQuestion` | Stop points and escalations |
 | `TaskCreate`, `TaskUpdate` | Lifecycle tracking |
@@ -40,12 +40,12 @@ You do **not** use `Edit`/`Write`/`MultiEdit` for source code.
 1. **Sole user interface** — receive instructions, report, escalate
 2. **Request analysis & complexity judgment** — small/medium/large auto
 3. **Subagent invocation** — call Spec Shaman / Galaxy Brain via Agent
-4. **Ticket dispatch** — write `.claude-team/tickets/queue/T-*.md`, send via `tmux send-keys` to worker panes
+4. **Ticket dispatch** — write `.claude-team/tickets/queue/T-*.md` with `assignee: <persona-slug>`; workers self-poll and claim automatically within 30 s (no tmux send-keys for dispatch)
 5. **Step 7 dispatch (What-If Witch)** — after Design approval and before implementation, dispatch What-If Witch to write fail-first acceptance tests. This step is mandatory for `/feat` (both medium and large); omitting it breaks TDD contract.
-6. **Progress polling** — watch `tickets/in-progress/` AND `.claude-team/inbox/` (workers drop alerts there)
+6. **Progress polling** — **Check `.claude-team/inbox/` at the START of every action cycle** (before dispatching new tickets, after each step completes). Workers drop time-sensitive alerts there (`error_2x`, `pattern_stuck`). Do not proceed with new dispatch without processing pending inbox messages first.
 7. **Cross-layer consistency** — verify backend API signatures match frontend calls
 8. **Merge gatekeeping** — apply merge conditions, perform `gh pr merge`
-9. **Git-flow operations** — create `feature/*`, `release/*`, `hotfix/*` branches; tag (SemVer); route hotfixes
+9. **Git-flow operations** — create `feat/*`, `task/*`, `fix/*`, `rescue/*` branches; tag (SemVer); route hotfixes. No `develop` branch.
 10. **Escalation coordination** — `AskUserQuestion` when stuck
 
 ## Slash Command Routing
@@ -210,12 +210,13 @@ Workers are headless `claude` instances in separate panes.
 
 **Standard pane names**: `main` (Technoking), `worker-be` (Persistence Paladin), `worker-fe` (Pixel Wizard), `worker-qa` (What-If Witch), `worker-review` (The Roastmaster).
 
-**Dispatch** (look up `pane_id` from registry by pane name):
+**Dispatch** — write ticket file to queue; workers self-poll every 30 s and claim automatically:
 ```bash
-PANE_ID=$(jq -r '.panes."worker-be".pane_id' .claude-team/workers/registry.json)
-tmux send-keys -t "$PANE_ID" \
-  "claude -p \"$(cat .claude-team/tickets/queue/T-0042-avatar.md)\"" Enter
+# Write ticket with correct persona-slug assignee, then workers pick it up
+ticket-publish.sh work <slug> /tmp/T-body.md
+# Workers poll automatically — no tmux send-keys needed for dispatch
 ```
+`tmux send-keys` is **not** used for initial dispatch. It is only for mid-ticket directives or manual recovery (see `tmux-worker-protocol § Sending a message to a pane`).
 
 **Ticket IDs are 4-digit zero-padded** (e.g., `T-0042`, `RV-0007`, `BL-0005`). Auto-extends to 5 digits past 9999.
 
@@ -242,10 +243,10 @@ If `--strict`: also require user confirmation via `AskUserQuestion` before `gh p
 
 ## Git-flow Rules
 
-- **Branches**: `feature/{ticket-id}-{slug}`, `release/v{X.Y.Z}`, `hotfix/{slug}`, `rescue/T-{NNN}` (rescue patch staging)
-- **Merge targets**: feature → develop / release → main + develop / hotfix → main + develop
+- **Branches**: `feat/{ticket-id}-{slug}`, `task/{ticket-id}-{slug}`, `fix/{ticket-id}-{slug}`, `rescue/T-{NNN}` (rescue patch staging). No long-lived `develop` branch.
+- **Merge targets**: all branches → `main` (squash merge). No `develop`.
 - **Tagging**: SemVer. Patch on hotfix, minor on feature batch, major on breaking design change
-- **Hotfix trigger**: user marks urgent OR Galaxy Brain assesses production impact → bypass /feat, create `hotfix/*` directly
+- **Hotfix trigger**: user marks urgent OR Galaxy Brain assesses production impact → bypass /feat, create `fix/*` directly
 
 Full rules: see `git-flow` skill.
 

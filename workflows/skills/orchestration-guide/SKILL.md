@@ -133,13 +133,13 @@ The following force a Stop even outside scheduled Stop points:
 
 ### Step 2 — PRD
 
-- Dispatch Spec Shaman as a subagent (Task tool).
+- Dispatch Spec Shaman as a **subagent (Agent tool)** — Spec Shaman runs inline in Technoking's main session.
 - Spec Shaman reads `documentation-criteria` and writes the PRD per that skill's spec.
 - For `medium`, the PRD lives as a section in the merged spec, not its own file.
 
 ### Step 4 — Design
 
-- Dispatch Galaxy Brain as a subagent.
+- Dispatch Galaxy Brain as a **subagent (Agent tool)** — Galaxy Brain runs inline in Technoking's main session.
 - Galaxy Brain reads `documentation-criteria`, then `coding-principles`, before designing.
 - ADRs created per the trigger rules in `documentation-criteria`.
 
@@ -158,9 +158,10 @@ The following force a Stop even outside scheduled Stop points:
 
 ### Step 8 — Parallel implementation
 
-- Worker tickets land in their pane queues per `assignee`.
-- Workers operate independently in their worktrees.
-- Workers may emit progress inbox messages; Technoking does not micromanage.
+- **Dispatch** (file-based, not tmux): Technoking writes ticket files to `tickets/queue/` with `assignee: <persona-slug>` (e.g., `persistence-paladin`, not `worker-be`). Workers self-poll every 30 s and claim automatically via `ticket-poll.sh`. No `tmux send-keys` needed for dispatch.
+- Workers operate independently in their ticket worktrees (`.worktrees/T-{NNN}/`).
+- **Inbox check**: Before dispatching the next ticket batch, Technoking checks `.claude-team/inbox/` for pending messages. Any `error_2x` or `pattern_stuck` messages trigger rescue BEFORE dispatching additional work.
+- Workers may emit `kind: progress` inbox messages; Technoking does not micromanage.
 - A worker reaching `kind: completion` indicates branch is pushed.
 
 ### Step 9 — Review loop

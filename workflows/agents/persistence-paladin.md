@@ -67,7 +67,7 @@ Never touch files outside this worktree. Push to your branch (`feature/T-{NNN}-{
    - Update header: `status: in-progress | worker: persistence-paladin | attempt_count: 1 | started: <ts>`
    - **If ticket has `rescue_branch: rescue/T-{NNN}` field** (rescue validation cycle): checkout that branch instead, validate the patch, run quality checks, skip to step 4.
 
-2. **Setup worktree**: `cd .worktrees/persistence-paladin/`; pull latest from `develop`; `git checkout -b feature/T-{NNN}-{slug}`
+2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
 
 3. **TDD cycle (per AC)**:
    - Read related Design Doc + PRD sections
@@ -82,7 +82,7 @@ Never touch files outside this worktree. Push to your branch (`feature/T-{NNN}-{
 
 5. **Push & PR**:
    - `git add` only target files; conventional commit msg
-   - `git push origin feature/T-{NNN}-{slug}` (or `rescue/T-{NNN}` for validation)
+   - `git push origin feat/T-{NNN}-{slug}` (or `rescue/T-{NNN}` for validation)
    - **Initial push** (no open PR yet): `gh pr create --repo <repo> --title "<ticket title>" --body "..."` — body must include: AC checklist, test plan, and paired PR link if cross-stack.
    - **Review fix push** (PR already exists, responding to BLOCKING/SHOULD findings): post a PR comment summarizing what was addressed:
      ```bash
@@ -97,6 +97,7 @@ Never touch files outside this worktree. Push to your branch (`feature/T-{NNN}-{
    - Notify Technoking via inbox `.claude-team/inbox/INBOX-<ts>-worker-be.json`:
      - Initial completion: `kind: completion` with `pr_url`, `branch`, `commit`
      - Review fix: `kind: fix_pushed` with `pr_url`, `branch`, `commit`, `ticket_ref` (original T-NNN)
+   - After writing the inbox message, **final action**: `touch .claude-team/.runtime/worker-be.complete`
 
 ## Escalation Conditions
 
@@ -112,8 +113,9 @@ Include `escalation_reason` in ticket. Technoking handles.
 **Rescue trigger (auto)** — fire on **any** of the following three conditions:
 
 1. **Same error class twice**: The same exception class + failing bean/test name appears in 2 consecutive `attempt_count` increments.
-   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_bean_or_test_name>`. **Do NOT include file:line** — those change across diagnostic iterations and break matching.
+   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_bean_or_test_name>`. **Do NOT include file:line** — those drift across diagnostic iterations and break matching.
    - Example: `NoSuchBeanDefinitionException:ObjectMapper` → `a3f8b2e1`
+   - Implementation: `printf '<exception_class>:<test_name>' | sha1sum | cut -c1-8`
 
 2. **Time limit exceeded**: Elapsed time since `started` > **20 minutes** with any unresolved build/test failure.
 
@@ -122,11 +124,12 @@ Include `escalation_reason` in ticket. Technoking handles.
 On any trigger:
 - Set ticket `status: rescue_candidate`
 - Increment `attempt_count` in ticket header
-- Create alert **`INBOX-<ts>-worker-be.json`** (exact filename format — Technoking polls this pattern):
+- Create alert **`INBOX-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)-worker-be.json`** in `.claude-team/inbox/`:
   ```json
   { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
   ```
-- Stop work on this ticket. Pick next queue item if available, else idle.
+- **Final action**: `touch .claude-team/.runtime/worker-be.complete` (shell watchdog will kill this session and resume polling)
+- Do NOT continue work on this ticket. Technoking handles rescue dispatch.
 - Technoking will invoke `/codex:rescue --background` and route the patch back as a new validation ticket `RV-NNNN-<slug>.md` (`type: review` § 4b, queue priority: highest) with `rescue_branch` field set.
 - **If the rescue patch validation also fails**: set `escalation_needed` (do not auto-rescue again). Post **`INBOX-<ts>-worker-be.json`** with `kind: escalation_needed`, `reason: rescue_failed`. Do not auto-rescue again.
 
@@ -141,7 +144,7 @@ T-{NNN} 완료했다.
 - 변경 파일: <count>개
 - 추가 테스트: <count>개
 - 커밋: <commit hashes>
-- 브랜치: feature/T-{NNN}-{slug}
+- 브랜치: feat/T-{NNN}-{slug}
 
 검증:
 - build: PASS
@@ -155,7 +158,7 @@ T-{NNN} 완료했다.
 
 ## Constraints
 
-- **Never modify files outside `.worktrees/persistence-paladin/`.**
+- **Never modify files outside your ticket's worktree (`.worktrees/T-{NNN}/`).**
 - **Never bypass the worktree.** No `git push` from main repo dir.
 - **Never skip tests.** Every code change has a test (existing or new).
 - **Follow project's DI conventions** (typically constructor injection — verify against `CLAUDE.md`).

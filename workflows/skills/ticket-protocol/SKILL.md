@@ -65,7 +65,8 @@ id: T-0042
 type: work
 title: idempotency key on charge endpoint
 status: queued | in_progress | in_review | rescue_candidate | done | cancelled
-assignee: worker-be | worker-fe | worker-qa | unassigned
+assignee: persistence-paladin | pixel-wizard | what-if-witch | unassigned   # persona slug — ticket-poll.sh matches by slug
+owner: persistence-paladin   # set by ticket-poll.sh at claim time; do not set manually
 complexity: small | medium | large
 parent_feature: feat/T-0040-charge-idempotency   # umbrella /feat ticket, optional
 acceptance_criteria: [AC-001, AC-002, AC-005]
@@ -127,7 +128,7 @@ id: RV-0010
 type: review
 title: review PR #42 round 2
 status: queued | in_progress | done
-assignee: worker-review
+assignee: the-roastmaster   # persona slug; ticket-poll.sh matches by slug
 source_ticket: T-0042
 pr_number: 42
 base_branch: main
@@ -146,7 +147,7 @@ id: RV-0007
 type: review
 title: validate rescue patch for T-0042
 status: queued | in_progress | done
-assignee: worker-be
+assignee: persistence-paladin   # persona slug of original ticket's worker
 source_ticket: T-0042
 source_rescue: RESCUE-20260511T143000+0900
 branch: rescue/T-0042
