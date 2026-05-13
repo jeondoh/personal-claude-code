@@ -29,7 +29,7 @@ Personas with `pane: subagent` always show `—` in the PID column.
 ```
 #  Persona               Role                   Model   Pane           PID
 -  --------------------  ---------------------  ------  -------------  ------
-1  Technoking            Tech Lead              sonnet  main           <pid>
+1  Technoking            Tech Lead              opus    main           <pid>
 2  Spec Shaman           Product Owner          sonnet  subagent       —
 3  Galaxy Brain          System Architect       opus    subagent       —
 4  Persistence Paladin   Backend / DB / Sec     sonnet  worker-be      <pid>

@@ -6,7 +6,7 @@
 
 | # | 이름 | 직책 | 모델 | 페인 |ㄱ
 |---|---|---|---|---|
-| 1 | **Technoking** | Tech Lead — 라이프사이클 마스터, ticket 분배, rescue 디스패치 | sonnet | `main` |
+| 1 | **Technoking** | Tech Lead — 라이프사이클 마스터, ticket 분배, rescue 디스패치 | **opus** | `main` |
 | 2 | **Spec Shaman** | Product Owner — PRD 작성 (사용자 산출물, 한국어) | sonnet | subagent |
 | 3 | **Galaxy Brain** | System Architect — Design Doc·ADR·인터페이스 설계 | **opus** | subagent |
 | 4 | **Persistence Paladin** | Backend — Kotlin/Spring, DB, 보안 흡수 | sonnet | `worker-be` |

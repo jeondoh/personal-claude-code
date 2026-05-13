@@ -163,7 +163,7 @@ stacks/<name>/
 
 | 이름 | 직책 | 모델 | 페인 |
 |---|---|---|---|
-| **Technoking** | Tech Lead — 라이프사이클·작업 분배·머지 게이트 | sonnet | `main` |
+| **Technoking** | Tech Lead — 라이프사이클·작업 분배·머지 게이트 | **opus** | `main` |
 | **Spec Shaman** | Product Owner — PRD 작성 | sonnet | subagent |
 | **Galaxy Brain** | System Architect — 설계 문서 · ADR | **opus** | subagent |
 | **Persistence Paladin** | Backend — DB · API · 서버 보안 | sonnet | `worker-be` |

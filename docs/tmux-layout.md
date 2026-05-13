@@ -20,7 +20,7 @@ claude-team tmux 세션의 페인 구조, 이동 방법, 워커 모니터링 방
 
 | 페인 | 페르소나 | 모델 | 역할 |
 |---|---|---|---|
-| `main` | Technoking | sonnet | 오케스트레이터 — 사용자가 슬래시 커맨드 입력하는 곳 |
+| `main` | Technoking | opus | 오케스트레이터 — 사용자가 슬래시 커맨드 입력하는 곳 |
 | `worker-fe` | Pixel Wizard | sonnet | 프론트엔드 구현 |
 | `worker-be` | Persistence Paladin | sonnet | 백엔드·DB 구현 |
 | `worker-qa` | What-If Witch | sonnet | QA·인수 테스트 |

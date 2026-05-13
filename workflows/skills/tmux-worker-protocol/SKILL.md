@@ -32,7 +32,7 @@ Pane names (`main`, `worker-*`) are the stable identifiers; scripts and `registr
 ## Pane → persona mapping
 
 ```
-main          → technoking            (sonnet)
+main          → technoking            (opus)
 worker-be     → persistence-paladin   (sonnet)
 worker-fe     → pixel-wizard          (sonnet)
 worker-qa     → what-if-witch         (sonnet)

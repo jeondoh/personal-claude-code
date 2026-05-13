@@ -34,7 +34,7 @@ Persona keys use **hyphens** to match the agent filenames (`agents/spec-shaman.m
 project_name: personal-claude
 plugins: { workflows: true, stack-kotlin-spring: false, stack-nextjs: false }
 personas:
-  technoking:           { model: sonnet, pane: main }
+  technoking:           { model: opus,   pane: main }
   spec-shaman:          { model: sonnet, pane: subagent }
   galaxy-brain:         { model: opus,   pane: subagent }
   persistence-paladin:  { model: sonnet, pane: worker-be }

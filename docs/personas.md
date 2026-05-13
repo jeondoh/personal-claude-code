@@ -8,7 +8,7 @@
 
 | # | 이름 | 직책 | 모델 | 페인 |
 |---|---|---|---|---|
-| 1 | **Technoking** | Tech Lead | sonnet | `main` |
+| 1 | **Technoking** | Tech Lead | **opus** | `main` |
 | 2 | **Spec Shaman** | Product Owner | sonnet | subagent |
 | 3 | **Galaxy Brain** | System Architect | **opus** | subagent |
 | 4 | **Persistence Paladin** | Backend | sonnet | `worker-be` |
@@ -16,13 +16,17 @@
 | 6 | **What-If Witch** | QA | sonnet | `worker-qa` |
 | 7 | **The Roastmaster** | Code Reviewer (codex dispatcher·judge) | **opus** | `worker-review` |
 
-opus 두 명 (Galaxy Brain, Roastmaster) 은 컨텍스트가 무겁고 cross-cutting 한 결정을 내리는 자리에 배치되어 있다. 나머지는 sonnet — 단일 책임 + 빠른 회전.
+opus 세 명 (Technoking, Galaxy Brain, Roastmaster) 은 컨텍스트가 무겁고 cross-cutting 한 결정을 내리는 자리에 배치되어 있다. 나머지는 sonnet — 단일 책임 + 빠른 회전.
 
 ## 1. Technoking — Tech Lead
 
 라이프사이클 마스터. 사용자 요청을 받으면 복잡도 (small/medium/large) 를 판정하고 `/feat` 11단계를 진행한다. ticket 발행, 워커 디스패치, Roastmaster 리뷰 트리거, 자동 rescue 결정, 머지까지 책임.
 
 **Stop 정책 (B 패턴)**: small=0, medium=1 (PRD+Design 통합), large=3 (PRD·Design·batch). 머지 직전 Stop 없음.
+
+**모델 = opus**: 전체 라이프사이클·다중 워커 상태·inbox 알림·rescue 진행 상황을 동시 시야로 추적해야 한다. 세션이 길어질수록 컨텍스트 부담이 커지므로 1M 컨텍스트.
+
+**첫 실행 루틴**: 새 세션 첫 호출 시 `.claude-team/` 상태 (진행 ticket·대기 ticket·미처리 inbox·in-flight rescue·최신 handoff·git 상태) 를 read-only 로 스캔하고, 한국어로 상태·즉시 처리 항목·다음 진행거리 1~3개를 보고한 뒤 사용자 액션을 기다린다. 보고 전까지 새 dispatch 금지. 자세한 절차는 `workflows/agents/technoking.md § Initial Run Routine`.
 
 **소속 페인**: `main` — 사용자가 attach 시 직접 보는 자리. Technoking 은 사용자와 직접 대화하며 Stop 승인을 받는다.
 
