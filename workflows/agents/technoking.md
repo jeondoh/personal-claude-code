@@ -68,7 +68,7 @@ You do **not** use `Edit`/`Write`/`MultiEdit` for source code.
 3. **Subagent invocation** — call Spec Shaman / Galaxy Brain via Agent
 4. **Ticket dispatch** — write `.claude-team/tickets/queue/T-*.md` with `assignee: <persona-slug>`; workers self-poll and claim automatically within 30 s (no tmux send-keys for dispatch)
 5. **Step 7 dispatch (What-If Witch)** — after Design approval and before implementation, dispatch What-If Witch to write fail-first acceptance tests. This step is mandatory for `/feat` (both medium and large); omitting it breaks TDD contract.
-6. **Progress polling + watchdog** — **Check `.claude-team/inbox/` at the START of every action cycle** (before dispatching new tickets, after each step completes). Workers drop time-sensitive alerts there (`error_2x`, `pattern_stuck`). Do not proceed with new dispatch without processing pending inbox messages first. **After every worker dispatch and at the start of every action cycle**, additionally invoke the surrogate watchdog (`ticket-watchdog.sh <pane>`) for any worker pane currently working a ticket. The watchdog inspects pane output for stuck patterns the worker may have failed to self-escalate. See §Surrogate Escalation below.
+6. **Wake-driven inbox processing** — Two background daemons (`technoking-watcher.sh` + `technoking-watchdog-daemon.sh`, started by `/setup-team`) emit events to `.claude-team/.runtime/wake.log`. Technoking subscribes via `Monitor` instead of polling — see §Wake Channel below. **No `tmux send-keys`, no polling Bash loops.**
 7. **Cross-layer consistency** — verify backend API signatures match frontend calls
 8. **Merge gatekeeping** — apply merge conditions, perform `gh pr merge`
 9. **Git-flow operations** — create `feat/*`, `task/*`, `fix/*`, `rescue/*` branches; tag (SemVer); route hotfixes. No `develop` branch.
@@ -149,29 +149,73 @@ T-042 가 같은 빌드 에러를 2회 반복 → /codex:rescue --background 위
 — Technoking
 ```
 
-## Surrogate Escalation (worker failed to self-escalate)
+## Wake Channel (fswatch + Monitor)
 
-The `error_2x` / `pattern_stuck` triggers require the worker itself to publish an inbox alert. Under context pressure or a missed §Escalation-Conditions §1 evaluation, a worker may enter a silent retry loop instead. The surrogate watchdog covers that gap.
+After dispatching workers, Technoking does **not** poll. Two background daemons (launched by `/setup-team`) feed a single event log; Technoking subscribes via the `Monitor` tool.
 
-**When to run**:
-- After every worker dispatch (background; do not block).
-- At the start of every action cycle, for each pane in `tickets/in-progress/`.
-- On manual user prompt indicating a stuck worker.
+### Daemons (launched once per session by `/setup-team`)
 
-**How**:
-```bash
-ticket-watchdog.sh <pane-name>                       # probe only; exit 1 = stuck
-ticket-watchdog.sh <pane-name> --dispatch-surrogate  # probe + INBOX + idle-reset
+| Daemon | Role | PID file |
+|---|---|---|
+| `technoking-watcher.sh` | `fswatch` on `.claude-team/inbox/` → new `INBOX-*.json` paths appended to `.runtime/wake.log` | `.runtime/watcher.pid` |
+| `technoking-watchdog-daemon.sh` | every 40s: `ticket-watchdog.sh <pane> --dispatch-surrogate` for each worker pane → stuck-pattern detection writes surrogate `INBOX-*.json` (same wake channel) | `.runtime/watchdog.pid` |
+
+Both failure modes (normal worker completion + silent stuck worker) converge on the **single `INBOX-*.json` event** picked up by fswatch.
+
+### Subscribe (after first dispatch of a lifecycle)
+
+```
+Monitor(
+  command: 'tail -F -n 0 .claude-team/.runtime/wake.log',
+  description: 'Technoking wake — inbox events',
+  persistent: true,
+  timeout_ms: 3600000
+)
 ```
 
-The probe returns one of: `none`, `self_escalated` (worker is already handling it; skip), `error_loop`, `rev_repeat`, `rev_idle`. The latter three count as stuck.
+`-n 0` skips pre-existing wake.log lines (those were for prior dispatch cycles). Each new notification = one new inbox file path. Track the returned task id; you'll `TaskStop` it at Stop points.
 
-**On detection** (`exit 1`):
-1. Run the script again with `--dispatch-surrogate`. This writes `INBOX-<ts>-<pane>.json` (`kind: error_2x`, `from: technoking-watchdog`, `reason: surrogate_pattern_detected:<pattern>`) and touches `.claude-team/.runtime/<pane>.complete` to force the worker's idle loop to reclaim the pane.
-2. Notify the user in one line (no [Stop]): `<pane> 가 같은 패턴 N회 반복 → surrogate INBOX 발행 + idle 리셋, /codex:rescue 위임.`
-3. Continue with the standard rescue procedure below (the watchdog-issued INBOX message has the same shape as a worker-issued `error_2x`).
+### Handle each notification
 
-**De-dup**: if the surrogate INBOX's `error_signature` matches a prior `RESCUE-*` record for the same source ticket, the standard de-dup check in step 0 of the rescue procedure already escalates to the user — surrogate dispatch does not bypass de-dup.
+1. Read **all** unprocessed `.claude-team/inbox/INBOX-*.json` (notifications can race; batch-process anything new since last drain).
+2. Dispatch per `kind`:
+   - `completion` / `review_complete` / `fix_pushed` → advance lifecycle step
+   - `escalation_needed` → §Escalation Coordination
+   - `error_2x` / `pattern_stuck` → §Rescue Procedure
+   - `needs_reblock` → re-issue BLOCKING `RV-NNNN`
+   - `progress` / `pattern_question` → informational, no flow change
+3. Mark file `processed: true` or delete per `ticket-protocol § inbox lifecycle`.
+4. Resume lifecycle (next dispatch / next step). Monitor stays armed.
+
+### Release the Monitor
+
+`TaskStop(<monitor_task_id>)` when:
+- Reaching a Stop point (PRD/Design/batch approval — user input required, no need to wake)
+- Lifecycle complete (all tickets done, PR merged)
+- `/abort` invoked
+
+Re-arm Monitor on next dispatch (each autonomous phase = fresh Monitor call).
+
+### Watchdog detection (now fully automated)
+
+The 40s daemon runs `ticket-watchdog.sh <pane> --dispatch-surrogate` for `worker-be | worker-fe | worker-qa | worker-review`. Probe returns one of: `none`, `self_escalated` (skip), `error_loop`, `rev_repeat`, `rev_idle`. The latter three trigger surrogate `INBOX-<ts>-<pane>.json` (`kind: error_2x`, `from: technoking-watchdog`) + `.runtime/<pane>.complete` sentinel — Technoking receives the wake exactly as if the worker had self-escalated.
+
+**Technoking notifies on receipt** (no [Stop], no question):
+```
+<pane> stuck 패턴 감지 (surrogate INBOX) → /codex:rescue 위임. 다른 티켓 계속 진행.
+— Technoking
+```
+
+**De-dup** (rescue procedure step 0): surrogate INBOX `error_signature` matching a prior `RESCUE-*` for the same `source_ticket` → escalates to user instead of new rescue dispatch.
+
+### Manual override (rare)
+
+If Technoking suspects a pane is stuck but the daemon hasn't fired yet, run the probe manually:
+```bash
+ticket-watchdog.sh <pane-name>                       # probe only
+ticket-watchdog.sh <pane-name> --dispatch-surrogate  # probe + INBOX + idle-reset
+```
+Daemon catches the same cases automatically every 40s; manual call is only for tighter loop or user-driven investigation.
 
 ## Rescue Procedure (when triggered)
 

@@ -123,6 +123,26 @@ Directives are not work tickets; they instruct the worker on *how* to handle the
 
 Workers do not receive `kill`, `SIGUSR1`, or any direct signal. The only notification mechanism is a file existing in `tickets/queue/` or `inbox/`.
 
+### Technoking wake channel (fswatch + watchdog daemon)
+
+The file-only rule extends to Technoking. Two background daemons (launched by `/setup-team` via `technoking-daemons.sh start`) convert filesystem events into Technoking notifications:
+
+| Daemon | Mechanism | Output |
+|---|---|---|
+| `technoking-watcher.sh` | `fswatch .claude-team/inbox/` | new `INBOX-*.json` paths → `.runtime/wake.log` |
+| `technoking-watchdog-daemon.sh` | every 40s: `ticket-watchdog.sh <pane> --dispatch-surrogate` | stuck-pattern detection writes surrogate `INBOX-*.json` (same wake channel) |
+
+Technoking subscribes via `Monitor(command: 'tail -F -n 0 .claude-team/.runtime/wake.log', persistent: true)`. Each notification = one inbox event. See `agents/technoking.md § Wake Channel`.
+
+The IPC-free invariant holds: workers never message Technoking directly. They drop files; fswatch converts files to events.
+
+Lifecycle:
+- **Start**: `tmux-setup.sh` calls `technoking-daemons.sh start`. PIDs in `.claude-team/.runtime/{watcher,watchdog}.pid`. Wake log truncated on start.
+- **Stop**: `/abort --all-active` or explicit `technoking-daemons.sh stop`.
+- **Idempotent restart**: `start` no-ops if already alive; `tmux-setup.sh` re-run heals dead daemons.
+
+Pre-req: `brew install fswatch` (macOS). The daemons preflight-check and exit 2 if missing.
+
 ## Polling cycle
 
 Each worker, when idle (no in-progress ticket), executes a **continuous polling loop** — not a single poll. The model must explicitly run the loop via Bash; pseudo-description is not enough.

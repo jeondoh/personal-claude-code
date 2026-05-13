@@ -57,8 +57,9 @@ Call `tmux-setup.sh` (plugin's `bin/` is in PATH — call by bare name, do NOT u
   - `main` (Technoking) → `claude --dangerously-skip-permissions` interactive, with a short Korean welcome listing the common slash commands.
   - Worker panes → `worker-idle.sh` shell polling loop. **No claude session while idle** (zero tokens, clean pane log). When a ticket is claimed, the shell execs claude with the ticket as the first message; when claude touches its sentinel file, the shell kills it and resumes polling.
 - Writes each worker pane's `{persona, pid, pane_id}` into `workers/registry.json` keyed by pane name (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`), atomically and lock-protected. `main` is NOT tracked — it's the user's pane and implicit.
+- Starts the Technoking wake daemons via `technoking-daemons.sh start` (`fswatch` on `inbox/` + 40s `ticket-watchdog.sh` loop). Required for autonomous lifecycle — Technoking subscribes to `.claude-team/.runtime/wake.log` via `Monitor`. Pre-req: `brew install fswatch`. See tmux-worker-protocol § Technoking wake channel.
 
-Re-runs are idempotent: if `claude-team` already exists, the script prints an attach hint and exits.
+Re-runs are idempotent: if `claude-team` already exists, the script restarts dead panes, re-ensures wake daemons are alive (`technoking-daemons.sh start` is a no-op when already running), prints an attach hint, and exits.
 See tmux-worker-protocol § Pane Layout and § Headless Launch.
 
 If `tmux-setup.sh` is absent (e.g. plugin install glitch): emit `"WARNING: tmux-setup.sh not found. Dirs and registry initialized. Reinstall the workflows plugin and rerun /setup-team."` and stop after Step 4.
@@ -80,6 +81,10 @@ worker-review   the-roastmaster      12345   alive
 worker-fe       pixel-wizard         12346   alive
 worker-be       persistence-paladin  12347   alive
 worker-qa       what-if-witch        12348   alive
+
+Wake daemons:
+  watcher  (fswatch inbox/)        pid 12349  alive
+  watchdog (40s ticket-watchdog)   pid 12350  alive
 
 Next: type a request in the main pane — e.g. /feat <request> or /task <request>
 ```

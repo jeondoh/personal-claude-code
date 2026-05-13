@@ -25,6 +25,7 @@
 | Ticket ID | 4자리 zero-pad: `T-0042`, `RV-0007`, `BL-0019`. 9999 초과 시 5자리 자동 확장. |
 | 카운터 | `.claude-team/workers/registry.json` 의 `counters: {T, RV, BL}`. RESCUE/HANDOFF 는 timestamp. |
 | codex 의존성 | **HARD**. `/codex:status` 통과 못하면 어떤 ticket 도 진행 불가. soft/degraded 모드 없음. |
+| Technoking wake | `fswatch` + 40s watchdog 데몬 (`technoking-daemons.sh`, `/setup-team` 가 launch). Inbox 이벤트 → `wake.log` → Technoking 의 `Monitor("tail -F")` 구독. 폴링 / `tmux send-keys` 없음. `brew install fswatch` 필요. |
 | 품질 게이트 | complexity (small/medium/large) **무관 전체** 적용 — codex 어드버서리얼 리뷰 (Roastmaster 가 비차단 dispatch·verdict 판정) + 자동 rescue. 자체 코드 리뷰 없음. |
 | 자동 rescue 트리거 | 워커 같은 에러 2회 (`error_2x`) / Roastmaster `pattern_stuck: true`. 사용자 승인 없이 발동. |
 | Stop 정책 (B 패턴) | small=0 / medium=1 (PRD+Design 통합) / large=3 (PRD·Design·batch). 머지 직전 Stop 없음. |

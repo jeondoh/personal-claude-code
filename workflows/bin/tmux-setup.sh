@@ -86,6 +86,11 @@ if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
   else
     echo "${RESTARTED}개 페인 재시작."
   fi
+  # Ensure wake daemons are alive (idempotent — no-op if already running).
+  DAEMONS_SCRIPT="${SCRIPT_DIR}/technoking-daemons.sh"
+  if [[ -x "$DAEMONS_SCRIPT" ]]; then
+    "$DAEMONS_SCRIPT" start >/dev/null 2>&1 || true
+  fi
   if [[ -n "${TMUX:-}" ]]; then
     echo "Switch from inside tmux:  tmux switch-client -t ${SESSION_NAME}"
   else
@@ -144,6 +149,17 @@ for pane_idx in 0 1 2 3 4; do
   }
 done
 
+# --- Start Technoking wake daemons (fswatch + 40s watchdog loop) ---
+# These convert filesystem events into Technoking notifications via
+# .claude-team/.runtime/wake.log, which Technoking subscribes to with
+# Monitor(tail -F ...). See tmux-worker-protocol § Technoking wake channel.
+DAEMONS_SCRIPT="${SCRIPT_DIR}/technoking-daemons.sh"
+if [[ -x "$DAEMONS_SCRIPT" ]]; then
+  "$DAEMONS_SCRIPT" start || echo "WARN: failed to start Technoking wake daemons" >&2
+else
+  echo "WARN: technoking-daemons.sh not found at $DAEMONS_SCRIPT — wake mechanism disabled" >&2
+fi
+
 # --- Focus main pane for user ---
 tmux select-pane -t "${SESSION_NAME}:team.0"
 
@@ -157,6 +173,10 @@ Pane layout:
   team.2  worker-fe      — Pixel Wizard
   team.3  worker-be      — Persistence Paladin
   team.4  worker-qa      — What-If Witch
+
+Wake daemons:
+  watcher  (fswatch on inbox/)        — pid file: ${CLAUDE_TEAM_DIR}/.runtime/watcher.pid
+  watchdog (40s ticket-watchdog loop) — pid file: ${CLAUDE_TEAM_DIR}/.runtime/watchdog.pid
 
 Attach with:
   tmux attach -t ${SESSION_NAME}

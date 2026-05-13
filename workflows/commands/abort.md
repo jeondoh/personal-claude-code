@@ -95,6 +95,16 @@ See `ticket-protocol § cancellation`.
 
 For each processed directive message: set `processed: true` in the inbox file frontmatter. Do not delete (retain for audit). Per `ticket-protocol § inbox lifecycle`.
 
+### Step 6 — Wake daemon teardown (`--all-active` only)
+
+When `--all-active` empties `tickets/in-progress/`, stop the Technoking wake daemons (fswatch + 40s watchdog):
+
+```bash
+technoking-daemons.sh stop
+```
+
+Single-ticket `/abort <id>` leaves daemons running — other in-flight tickets still need the wake channel. Daemons resume automatically on the next `/setup-team` (idempotent).
+
 ---
 
 ## Expected Output
