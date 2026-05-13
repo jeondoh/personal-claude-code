@@ -134,24 +134,31 @@ ABS_PROMPT_FILE="$(to_abs "$PROMPT_FILE")"
 # touches a sentinel file), shell resumes polling.
 
 if [[ "$PANE_NAME" == "main" ]]; then
-  read -r -d '' WELCOME <<EOF || true
-이 메시지는 사용자에게 출력하는 환영 인사다. 정확히 한 번 다음 텍스트만 출력하고 사용자 입력을 기다린다. 추가 설명·다른 동작 없음.
+  read -r -d '' WELCOME <<'EOF' || true
+새 세션 첫 호출이다. 페르소나 정의의 §Initial Run Routine 을 지금 정확히 한 번 실행하고 보고한다. 같은 세션 내 반복 발동 X.
 
-━━ Technoking 작업대 ━━
-워커 4명 (worker-review · worker-fe · worker-be · worker-qa) 백그라운드 폴링 중.
+순서 (read-only · 새 ticket 발행·dispatch 금지):
+1. `.claude-team/config.yml` + `.claude-team/workers/registry.json` 존재 확인 — 없으면 "`/setup-team` 부터 실행해주세요." 한 줄 안내 후 중단
+2. `.claude-team/workers/registry.json` — 페인·페르소나·PID 상태
+3. `.claude-team/tickets/in-progress/`, `.claude-team/tickets/queue/` — 진행·대기 ticket 수와 ID
+4. `.claude-team/inbox/` — 미처리 알림 (`error_2x`, `pattern_stuck`, `fix_pushed`, `escalation_needed`)
+5. `.claude-team/rescues/` — in-flight rescue 여부
+6. `.claude-team/handoff/` — 최신 `HANDOFF-*.md` 본문 핵심 1~2줄
+7. `git status` + 현재 브랜치 — 미커밋·머지 대기 PR 여부
 
-자주 쓰는 명령:
-  /feat <요청>   — 전체 라이프사이클 (PRD → 설계 → 구현 → 리뷰 → 머지)
-  /task <요청>   — 작은 작업 (1-2 파일, 단일 영역)
-  /design <요청> — PRD · 설계 문서만
-  /status        — 워커 진행 보드
-  /show-team     — 팀 로스터 + PID
-  /abort <T-NNNN>— 진행 중 ticket 중단
+보고 (한국어 존대, 짧게):
+- 헤더: `━━ Technoking 작업대 ━━`
+- 상태 1줄: `진행 N / 대기 N / 알림 N / rescue M`
+- 즉시 처리 항목 (있을 때만): 미처리 inbox 알림 · `escalation_needed` ticket · 머지 대기 PR
+- 다음 진행거리 1~3개 (우선순위 순) — "다음 액션이 무엇인지" 명확하게
+- 액션 제안: 자동 진행 가능 건은 진행 여부 확인, 사용자 결정 필요 건은 옵션 제시
+- HANDOFF 발견 시: 본문 핵심 1~2줄 + `/handoff --resume` 제안
+- Empty state (모두 비어있음): "팀 준비 완료, 진행 중 없음. /feat | /task | /design 중 선택해주세요."
 
-여기서 명령 주면 워커들에게 분배된다. 다른 페인은 들여다보지 말고 이 작업대에서 명령만.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
+보고 말미에 자주 쓰는 명령 한 줄로 첨부:
+  /feat <요청> · /task <요청> · /design <요청> · /status · /show-team · /abort <T-NNNN>
 
-위 텍스트를 출력한 직후 무조건 사용자 입력 대기. 자동 동작·자동 polling X.
+보고 출력 직후 사용자 입력 대기. 자동 dispatch X.
 EOF
 
   TASK_FILE="${RUNTIME_DIR}/${SLUG}.task"
