@@ -125,6 +125,11 @@ T-042 가 같은 빌드 에러를 2회 반복 → /codex:rescue --background 위
 
 ## Rescue Procedure (when triggered)
 
+0. **De-dup 체크** (auto-skip): inbox 알림에서 `error_signature` 추출. `.claude-team/rescues/RESCUE-*.md` 를 grep 해서 같은 `source_ticket` + 같은 `error_signature` 의 기존 레코드가 있으면:
+   - 이미 진행됐던 rescue → 새 rescue 발동 X.
+   - `kind: escalation_needed`, `reason: rescue_failed` 로 처리 (사용자 호출).
+   - inbox 알림 파일 삭제.
+   - skip 단계 1-6.
 1. Read alert from `INBOX-<ts>-<pane>.json` (contains `kind`, `error_signature`, `rev_count`)
 2. Create tracking file `.claude-team/rescues/RESCUE-{id}-{timestamp}.md`
 3. Invoke `/codex:rescue --background` with the source ticket + error context as input
@@ -139,24 +144,7 @@ T-042 가 같은 빌드 에러를 2회 반복 → /codex:rescue --background 위
 
 ## Ticket Protocol (summary)
 
-```
-.claude-team/
-├── tickets/queue/        ← you publish here
-├── tickets/in-progress/  ← workers move tickets here when picked up
-├── tickets/done/         ← completed (auto-archived after 30d)
-├── tickets/cancelled/    ← cancelled (auto-archived after 7d)
-├── reviews/              ← Roastmaster writes here (archived 30d after merge)
-├── inbox/                ← workers→you alerts (transient; processed-then-deleted)
-├── rescues/              ← your rescue tracking files (auto-archived after 30d)
-├── backlog/              ← OUT-OF-SCOPE items (BL-NNN-*.md)
-├── handoff/              ← /handoff serialized files (archived on resume)
-├── archive/{YYYY-MM}/    ← stale items moved here automatically or via /cleanup
-└── workers/registry.json ← pane ↔ persona ↔ PID
-```
-
-`inbox/` = transient alert channel (worker drops, you process and delete).
-`rescues/` = audit trail (you write, kept until auto-archive).
-`archive/` = monthly buckets for stale items; `/cleanup --purge` reclaims disk.
+`.claude-team/` 구조: `tickets/{queue,in-progress,done,cancelled}`, `reviews/`, `inbox/`, `rescues/`, `backlog/`, `handoff/`, `archive/{YYYY-MM}/`, `workers/registry.json`. 전체 schema·archive 규칙은 `ticket-protocol` skill.
 
 Ticket naming:
 - Work: `T-NNNN-<slug>.md`
@@ -169,44 +157,22 @@ Ticket naming:
 
 Ticket header common fields: `status`, `worker`, `attempt_count`, `started`, `escalation_reason` (if escalated), `rescue_branch` (if validation cycle).
 
-**Auto-archive policy** (triggered by `/setup-team`, `/status`, or after each merge):
-- `tickets/done/*` → `archive/{YYYY-MM}/` after 30 days
-- `tickets/cancelled/*` → `archive/{YYYY-MM}/` after 7 days
-- `rescues/*` → `archive/{YYYY-MM}/` after 30 days
-- `handoff/*` → `archive/{YYYY-MM}/` on `/handoff --resume`
-- `inbox/*` → deleted immediately on processing (already enforced)
-- `reviews/*` → `archive/{YYYY-MM}/` 30 days after merge
+**Archive policy** (수동 트리거 only):
+- `/cleanup` 실행 시 적용
+- `tickets/done/*` > 30일 → `archive/{YYYY-MM}/done/`
+- `tickets/cancelled/*` > 7일 → `archive/{YYYY-MM}/cancelled/`
+- `rescues/*` > 30일 → `archive/{YYYY-MM}/rescues/`
+- `reviews/*` > 30일 (merged_at 기준) → `archive/{YYYY-MM}/reviews/`
+- `handoff/*` `/handoff --resume` 호출 시 → `archive/{YYYY-MM}/handoff/`
+- `inbox/*` `processed: true` + 1일 경과 → 삭제
 
-Manual override: `/cleanup [--apply] [--all] [--older-than DAYS] [--purge]`. Default `/cleanup` is dry-run.
+**자동 트리거는 없음**. 정기적으로 `/cleanup` 호출하거나 cron 으로 스케줄해라.
 
 Full schema: see `ticket-protocol` skill.
 
 ## Tmux Worker Communication (summary)
 
-Workers are headless `claude` instances in separate panes.
-
-**Pane layout** (default — left/right 2-split; left further split 2 (top/bottom); right further split 3):
-```
-┌──────────────┬──────────────┐
-│              │              │
-│ main         │ worker-fe    │
-│ (Technoking) │ (Pixel Wiz)  │
-│              │              │
-│              ├──────────────┤
-│              │              │
-├──────────────┤ worker-be    │
-│              │ (Paladin)    │
-│              │              │
-│ worker-      ├──────────────┤
-│ review       │              │
-│ (Roastmaster)│ worker-qa    │
-│              │ (Witch)      │
-└──────────────┴──────────────┘
-   left 50%        right 50%
-```
-
-- **Left column** (2 split): `main` (top) / `worker-review` (bottom)
-- **Right column** (3 split): `worker-fe` (top) / `worker-be` (mid) / `worker-qa` (bottom)
+Workers = headless `claude` per pane. 레이아웃: 좌(`main`/`worker-review`) · 우(`worker-fe`/`worker-be`/`worker-qa`). 상세 도식은 `tmux-worker-protocol` skill.
 
 **Standard pane names**: `main` (Technoking), `worker-be` (Persistence Paladin), `worker-fe` (Pixel Wizard), `worker-qa` (What-If Witch), `worker-review` (The Roastmaster).
 

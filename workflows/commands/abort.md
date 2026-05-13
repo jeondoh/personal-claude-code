@@ -43,7 +43,7 @@ Confirm `<ticket-id>.md` exists in `.claude-team/tickets/in-progress/`.
 
 Technoking identifies the assigned worker pane via `workers/registry.json` (`assignee` field in ticket frontmatter → pane slug → PID).
 
-Technoking publishes a `kind: directive` inbox message (`ticket-protocol § type=inbox`) to `.claude-team/inbox/INBOX-<ts>-<pane>.md`:
+Technoking publishes a `kind: directive` inbox message (`ticket-protocol § type=inbox`) to `.claude-team/inbox/INBOX-<ts>-<pane>.json`:
 
 ```yaml
 kind: directive
@@ -53,7 +53,18 @@ instruction: "Abort current work. Commit nothing. Return to idle."
 ```
 
 **Without `--force`**: wait up to 60 s for worker ack (`processed: true`); timeout → proceed and log.  
-**With `--force`**: skip wait; proceed immediately to Step 3.
+**With `--force`**: skip wait; proceed immediately to Step 2.5.
+
+> **한계**: directive 는 워커가 idle 폴링 중일 때만 즉시 적용된다. 워커가 이미 claude 인스턴스를 띄워 ticket 을 작업 중이면 directive 는 inbox 에 남아있고, 현재 ticket 종료까지 적용 안 된다. **즉시 중단이 필요하면 `--force` 사용** — 해당 pane 의 claude PID 를 `tmux send-keys C-c` 로 직접 인터럽트.
+
+### Step 2.5 — `--force` 동작 확장
+
+`--force` 사용 시:
+1. 60s wait 생략
+2. pane registry 에서 claude PID 조회
+3. `tmux send-keys -t <pane_id> C-c` 로 SIGINT 전달 (claude 가 우아하게 종료)
+4. 2초 후 미반응 시 `kill -TERM <pid>`
+5. Step 3 (worktree 제거) 로 진행
 
 ### Step 3 — Worktree removal
 

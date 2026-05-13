@@ -89,8 +89,6 @@ Roastmaster's authority is final. A BLOCKING from Roastmaster halts merge until 
 
 ### Stop format
 
-When a Stop point is reached, Technoking writes a clear approval prompt:
-
 ```
 [Stop — <step name>]
 
@@ -99,10 +97,10 @@ When a Stop point is reached, Technoking writes a clear approval prompt:
 추천: <option + rationale>
 
 대안:
-- <option B>: <one-line rationale>
-- <option C>: <one-line rationale>
+- <option B>: <rationale>
+- <option C>: <rationale>
 
-승인하시면 다음 단계로 진행합니다. 변경 원하시면 알려주세요.
+승인하시면 다음 단계로 진행합니다.
 ```
 
 ### Batch approval (step 6, large only)
@@ -127,85 +125,59 @@ The following force a Stop even outside scheduled Stop points:
 
 ### Step 1 — Intake
 
-- Read user prompt, classify complexity using the rule table.
-- Create umbrella ticket (`type: work` for the parent `/feat`) in `tickets/queue/`. Assignee: `unassigned`.
-- Move it to `in-progress/` once Technoking starts working it.
+- Classify complexity per rule table.
+- Create umbrella ticket (`type: work`) in `tickets/queue/`, assignee `unassigned`. Move to `in-progress/` on start.
 
 ### Step 2 — PRD
 
-- Dispatch Spec Shaman as a **subagent (Agent tool)** — Spec Shaman runs inline in Technoking's main session.
-- Spec Shaman reads `documentation-criteria` and writes the PRD per that skill's spec.
-- For `medium`, the PRD lives as a section in the merged spec, not its own file.
+- Dispatch Spec Shaman as subagent (Agent tool) — runs inline in `main`.
+- PRD per `documentation-criteria`. `medium` → merged spec section, not own file.
 
 ### Step 4 — Design
 
-- Dispatch Galaxy Brain as a **subagent (Agent tool)** — Galaxy Brain runs inline in Technoking's main session.
-- Galaxy Brain reads `documentation-criteria`, then `coding-principles`, before designing.
-- ADRs created per the trigger rules in `documentation-criteria`.
+- Dispatch Galaxy Brain as subagent (Agent tool) — runs inline in `main`.
+- Galaxy Brain reads `documentation-criteria` + `coding-principles`. ADRs per trigger rules.
 
 ### Step 6 — Task decomposition
 
-- Goal: non-overlapping tickets where each ticket's `files_in_scope` doesn't collide with another. If overlap is unavoidable, sequence via `depends_on`.
-- Each ticket sized for one worker, ≤ ~400 lines of expected diff.
-- For `medium`, decomposition often yields 1–2 tickets and is performed inline (no Stop).
-- For `large`, decomposition produces a batch. The Stop step is the batch approval.
+- Non-overlapping `files_in_scope`. Overlap → sequence via `depends_on`. Ticket ≤ ~400 LOC diff.
+- `medium`: 1–2 tickets inline (no Stop). `large`: batch with approval Stop.
 
 ### Step 7 — Fail-first acceptance tests
 
-- What-If Witch reads the AC list from PRD/Design and writes one acceptance test per AC.
-- Tests committed to the feature branch in red state before Paladin/Wizard begin step 8.
-- An AC that cannot be expressed as a test triggers `escalation_needed: untestable_ac`.
+- What-If Witch writes one acceptance test per AC, committed red before step 8.
+- Untestable AC → `escalation_needed: untestable_ac`.
 
 ### Step 8 — Parallel implementation
 
-- **Dispatch** (file-based, not tmux): Technoking writes ticket files to `tickets/queue/` with `assignee: <persona-slug>` (e.g., `persistence-paladin`, not `worker-be`). Workers self-poll every 30 s and claim automatically via `ticket-poll.sh`. No `tmux send-keys` needed for dispatch.
-- Workers operate independently in their ticket worktrees (`.worktrees/T-{NNN}/`).
-- **Inbox check**: Before dispatching the next ticket batch, Technoking checks `.claude-team/inbox/` for pending messages. Any `error_2x` or `pattern_stuck` messages trigger rescue BEFORE dispatching additional work.
-- Workers may emit `kind: progress` inbox messages; Technoking does not micromanage.
-- A worker reaching `kind: completion` indicates branch is pushed.
+- **Dispatch (file-based)**: write tickets to `tickets/queue/` with `assignee: <persona-slug>` (e.g., `persistence-paladin`, not `worker-be`). Workers self-poll every 30 s via `ticket-poll.sh`. No `tmux send-keys` for dispatch.
+- **Inbox check before next batch**: any `error_2x` / `pattern_stuck` → rescue first.
+- Worker worktrees `.worktrees/T-{NNN}/`. `kind: progress` = info; `kind: completion` = branch pushed.
 
 ### Step 9 — Review loop
 
-- Technoking opens PR using `git-flow`'s template.
-- Technoking dispatches a review ticket to `worker-review` pane.
-- Roastmaster dispatches `/codex:adversarial-review --background` (codex is sole reviewer; Roastmaster does **not** walk the diff). Writes a `codex_pending` placeholder `RR-T-NNNN-<round>.md`, then **returns to the queue** to handle other reviews or pending jobs — never blocks. See `adversarial-review-bridge` § "Non-blocking dispatch — invariants".
-- On result arrival (next Roastmaster turn), Roastmaster judges the findings — uphold or downgrade — and finalizes the report with verdict.
-- Verdict semantics:
+- Technoking opens PR (`git-flow` template), dispatches review ticket to `worker-review`.
+- Roastmaster dispatches `/codex:adversarial-review --background` (sole reviewer), writes `codex_pending` `RR-T-NNNN-<round>.md`, returns to queue — never blocks. See `adversarial-review-bridge` § non-blocking invariants.
+- Next turn: Roastmaster judges codex result (uphold/downgrade), finalizes verdict.
 
 | Verdict | Effect |
 |---|---|
-| `APPROVE` | Proceed to step 10 (or step 11 if step 10 is skipped per AC). Merge unblocked. |
-| `COMMENT` | Non-blocking. Merge may proceed. Workers address comments inline; material follow-ups become `BL-NNNN`. |
-| `BLOCKING` | Merge halted. Workers fix and push, Roastmaster re-reviews. Counts toward the round limit. |
+| `APPROVE` | Step 10 (or 11). Merge unblocked. |
+| `COMMENT` | Non-blocking. Inline fixes; material follow-ups → `BL-NNNN`. |
+| `BLOCKING` | Merge halted. Fix-and-rereview round; counts toward limit. |
 
-On BLOCKING:
-  1. Roastmaster sends inbox `kind: review_complete` (verdict=BLOCKING, report path).
-  2. Technoking sends `kind: directive` to worker pane (fix instructions citing BLOCKING items).
-  3. Worker fixes on the same branch, pushes, emits `kind: fix_pushed`.
-  4. Technoking publishes a new `type: review` ticket (`RV-NNNN`, `round: prev+1`, schema per `ticket-protocol § 4a`) into `tickets/queue/`.
-  5. Roastmaster Phase A picks it up; new round begins.
-
-On COMMENT:
-  - Worker inline edits push to the same branch without triggering a new round.
-  - Material follow-ups become `BL-NNNN`.
-  - If the worker judges the comment merits a blocking re-review, emit `kind: needs_reblock`; Technoking upgrades to BLOCKING and follows the flow above (round+1 ticket).
-
-- Auto-rescue triggers (see `adversarial-review-bridge`) may fire mid-loop.
-- Hard limit: 3 BLOCKING rounds. After round 3 BLOCKING, escalate to user.
+BLOCKING flow: `review_complete`(BLOCKING) → directive → fix → `fix_pushed` → new `RV-NNNN` (`round: prev+1`, schema `ticket-protocol § 4a`) → Roastmaster Phase A.
+COMMENT flow: worker inline-pushes; `kind: needs_reblock` upgrades to BLOCKING.
+Auto-rescue (see `adversarial-review-bridge`) may fire mid-loop. Hard limit: 3 BLOCKING rounds → escalate.
 
 ### Step 10 — Integration + E2E
 
-- Default for `large`. Optional for `medium` (driven by AC's verification strategy).
-- What-If Witch validates against integration test suite.
-- Up to 2 retry rounds. After 2 failures, escalate.
+- `large` default; `medium` per AC. What-If Witch runs integration suite.
+- Max 2 retries → escalate.
 
 ### Step 11 — Merge
 
-- Technoking enforces pre-merge checklist (`git-flow`).
-- Squash merge to `main`.
-- Move ticket to `tickets/done/`.
-- Remove worktree.
-- Write completion summary in inbox or directly to user.
+- Pre-merge checklist (`git-flow`). Squash to `main`, move ticket → `done/`, remove worktree, post completion summary.
 
 ## Composition map
 

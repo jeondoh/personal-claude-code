@@ -51,6 +51,11 @@ MODEL="$(fm_field "$PERSONA_FILE" model)"
 SENTINEL_DIR="${CLAUDE_TEAM_DIR}/.runtime"
 SENTINEL="${SENTINEL_DIR}/${PANE_NAME}.complete"
 mkdir -p "$SENTINEL_DIR"
+# 절대 경로 변환
+case "$SENTINEL" in
+  /*) ABS_SENTINEL="$SENTINEL" ;;
+   *) ABS_SENTINEL="$(pwd)/$SENTINEL" ;;
+esac
 
 # ---------- greeting ---------------------------------------------------------
 
@@ -116,7 +121,7 @@ Read CLAUDE.md, your persona file (${PERSONA_FILE}), the ticket frontmatter + bo
 
 When the ticket is fully done (PR pushed + completion inbox message written), OR when you have escalated via an inbox message (kind: escalation_needed / error_2x / pattern_stuck / etc.), your LAST action MUST be exactly:
 
-  Bash: touch ${SENTINEL}
+  Bash: touch ${ABS_SENTINEL}
 
 After that, do NOT continue. The shell watchdog in this pane will see the sentinel and end this Claude session, returning the pane to idle polling.
 
@@ -129,22 +134,41 @@ EOMSG
         --append-system-prompt-file "$PROMPT_FILE" \
         "$first_msg" &
       CLAUDE_PID=$!
+      TICKET_TIMEOUT="${CLAUDE_TEAM_TICKET_TIMEOUT:-1800}"
+      START_TS=$(date +%s)
 
-      # Watchdog: poll for sentinel OR claude dying naturally.
+      # Watchdog: poll for sentinel, claude dying, or timeout.
       while kill -0 "$CLAUDE_PID" 2>/dev/null; do
         if [[ -f "$SENTINEL" ]]; then
-          # Give claude 2s to flush final output, then send INT for graceful shutdown.
           sleep 2
           kill -INT "$CLAUDE_PID" 2>/dev/null || true
-          sleep 1
-          # If still alive, force kill.
+          sleep 3
           kill -0 "$CLAUDE_PID" 2>/dev/null && kill -TERM "$CLAUDE_PID" 2>/dev/null
+          break
+        fi
+        ELAPSED=$(( $(date +%s) - START_TS ))
+        if [[ $ELAPSED -ge $TICKET_TIMEOUT ]]; then
+          printf '[%s] ticket timeout (%ds) — claude 강제 종료\n' "$(ts)" "$ELAPSED"
+          INBOX_TS=$(TZ=Asia/Seoul date +'%Y%m%dT%H%M%S+0900')
+          cat > "${CLAUDE_TEAM_DIR}/inbox/INBOX-${INBOX_TS}-${PANE_NAME}.json" <<EOF
+{ "kind": "escalation_needed", "reason": "ticket_timeout", "pane": "${PANE_NAME}", "elapsed_seconds": ${ELAPSED}, "ticket_file": "${ticket_file}" }
+EOF
+          kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+          sleep 2
+          kill -KILL "$CLAUDE_PID" 2>/dev/null || true
           break
         fi
         sleep 3
       done
       wait "$CLAUDE_PID" 2>/dev/null
       rm -f "$SENTINEL"
+
+      END_TS=$(date +%s)
+      DURATION=$(( END_TS - START_TS ))
+      if [[ $DURATION -lt 10 ]]; then
+        printf '[%s] claude 가 %ds 만에 종료됨 — 60s 백오프\n' "$(ts)" "$DURATION"
+        sleep 60
+      fi
 
       printf '\n────────────────────────────────────────\n'
       printf '[%s] ticket 종료. 폴링 재개.\n\n' "$(ts)"

@@ -114,6 +114,21 @@ The worker computes the signature after the second occurrence and includes it in
 
 Detailed schemas in `ticket-protocol` — `rescue` and `review` ticket types.
 
+## codex-plugin-cc 계약 가정 (rescue 파이프라인 의존)
+
+이 파이프라인은 codex-plugin-cc 의 다음 동작을 가정한다:
+
+| 가정 | 위반 시 증상 |
+|---|---|
+| `/codex:rescue --background` 가 background job 으로 큐잉되고 `codex_job_id` 반환 | foreground block — Technoking idle 잠김 |
+| `/codex:result <job_id>` 가 patch diff 또는 branch 명 반환 | patch 수령 불가 |
+| codex 가 패치를 (1) 브랜치로 푸시 OR (2) diff 텍스트로 반환 | rescue 완료 감지 실패 |
+
+위반 발견 시:
+- Technoking 은 `kind: escalation_needed`, `reason: codex_unavailable` 발사
+- 사용자에게 codex-plugin-cc 버전 확인 안내
+- 자동 재시도 X — degraded mode 없음
+
 ## Validation failure — never re-rescue
 
 If validation fails (worker can't make tests pass with the patch, or Roastmaster BLOCKINGs the rescue):

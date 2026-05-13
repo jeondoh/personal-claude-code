@@ -71,6 +71,12 @@ esac
 [[ -f "$REGISTRY" ]]  || die_pre "registry.json not found — run /setup-team first"
 [[ -d "$QUEUE_DIR" ]] || die_pre "queue dir not found: $QUEUE_DIR"
 
+# counters 무결성 검증
+if command -v jq &>/dev/null; then
+  jq -e '.counters.T and .counters.RV and .counters.BL | (type=="number" or .)' "$REGISTRY" &>/dev/null \
+    || die_pre "registry.json counters 손상 — {T,RV,BL} 키 없음"
+fi
+
 # ---------- lock + ID --------------------------------------------------------
 
 acquire_lock
@@ -88,8 +94,40 @@ DEST="${QUEUE_DIR}/${FILENAME}"
 TMP="/tmp/$$.${TICKET_ID}.md"
 cp "$BODY_FILE" "$TMP"
 
-if ! fm_has "$TMP" "type" || ! fm_has "$TMP" "title" \
-   || ! fm_has "$TMP" "status" || ! fm_has "$TMP" "created"; then
+HAS_FM=false
+[[ "$(head -n1 "$TMP")" == "---" ]] && HAS_FM=true
+
+if $HAS_FM; then
+  # 누락된 필드만 frontmatter 안에 삽입
+  TMP2="${TMP}.p"
+  TITLE_DEFAULT="$(grep -m1 '^# ' "$TMP" | sed 's/^# //' || echo "$SLUG")"
+  awk -v tp="$TYPE" -v id="$TICKET_ID" -v ttl="$TITLE_DEFAULT" -v ts="$(kst_now)" '
+    BEGIN { in_fm=0; emitted_open=0; have_type=0; have_id=0; have_title=0; have_status=0; have_created=0; have_author=0 }
+    /^---/ {
+      if (!emitted_open) { print; in_fm=1; emitted_open=1; next }
+      else if (in_fm) {
+        if (!have_type)    print "type: " tp
+        if (!have_id)      print "id: " id
+        if (!have_title)   print "title: " ttl
+        if (!have_status)  print "status: queued"
+        if (!have_author)  print "author: technoking"
+        if (!have_created) print "created: " ts
+        print; in_fm=0; next
+      }
+    }
+    in_fm {
+      if ($1=="type:")    have_type=1
+      if ($1=="id:")      have_id=1
+      if ($1=="title:")   have_title=1
+      if ($1=="status:")  have_status=1
+      if ($1=="author:")  have_author=1
+      if ($1=="created:") have_created=1
+      print; next
+    }
+    { print }
+  ' "$TMP" > "$TMP2"
+  mv -f "$TMP2" "$TMP"
+else
   TITLE="$(grep -m1 '^# ' "$TMP" | sed 's/^# //' || echo "$SLUG")"
   { printf -- "---\ntype: %s\nid: %s\ntitle: %s\nstatus: queued\nauthor: technoking\ncreated: %s\n---\n" \
       "$TYPE" "$TICKET_ID" "$TITLE" "$(kst_now)"; cat "$TMP"; } > "${TMP}.p"

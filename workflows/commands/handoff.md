@@ -22,8 +22,8 @@ Verify all three gates in order. Halt on first failure.
 
 ### Step 1 — Timestamp
 
-Generate `<ts>` in KST ISO compact format: `YYYYMMDDTHHmm+0900`  
-Example: `20260511T0145+0900`
+Generate `<ts>` in KST ISO compact format: `YYYYMMDDTHHmmss+0900`  
+Example: `20260511T014530+0900`
 
 Output path: `.claude-team/handoff/HANDOFF-<ts>.md`
 

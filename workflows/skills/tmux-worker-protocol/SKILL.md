@@ -117,6 +117,8 @@ Two channels:
 
 Directives are not work tickets; they instruct the worker on *how* to handle the in-flight ticket (e.g., "stop and pivot to T-0050", "drop this approach, see updated AC").
 
+> **Directive 한계**: 워커가 ticket 작업 중 (claude 인스턴스 active) 에는 inbox poll 하지 않음 — directive 는 다음 ticket cycle 까지 대기. **즉시 인터럽트가 필요하면** `/abort <T-NNNN> --force` 사용 (pane PID 에 직접 SIGINT 전달).
+
 ### No signals, no IPC
 
 Workers do not receive `kill`, `SIGUSR1`, or any direct signal. The only notification mechanism is a file existing in `tickets/queue/` or `inbox/`.

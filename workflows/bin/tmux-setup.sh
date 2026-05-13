@@ -51,7 +51,8 @@ if ! command -v claude &>/dev/null; then
   exit 2
 fi
 if [[ ! -f "${CLAUDE_TEAM_DIR}/config.yml" ]]; then
-  echo "WARNING: ${CLAUDE_TEAM_DIR}/config.yml not found. /setup-team should have created it." >&2
+  echo "ERROR: ${CLAUDE_TEAM_DIR}/config.yml 없음 — /setup-team 을 먼저 실행해라." >&2
+  exit 2
 fi
 if [[ ! -x "${LAUNCH_SCRIPT}" ]]; then
   echo "ERROR: worker-launch.sh not found or not executable at ${LAUNCH_SCRIPT}" >&2
@@ -62,7 +63,29 @@ fi
 # When called from inside an existing tmux session, attaching nested fails.
 # Print attach hint and exit success.
 if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
-  echo "Session '${SESSION_NAME}' already exists — leaving panes intact."
+  echo "Session '${SESSION_NAME}' 존재 — 페인 liveness 확인 중."
+  RESTARTED=0
+  for pane_idx in 0 1 2 3 4; do
+    case "$pane_idx" in
+      0) persona="technoking";          pane_name="main"          ;;
+      1) persona="the-roastmaster";     pane_name="worker-review" ;;
+      2) persona="pixel-wizard";        pane_name="worker-fe"     ;;
+      3) persona="persistence-paladin"; pane_name="worker-be"     ;;
+      4) persona="what-if-witch";       pane_name="worker-qa"     ;;
+    esac
+    tgt="${SESSION_NAME}:team.${pane_idx}"
+    pid="$(tmux display-message -t "$tgt" -p '#{pane_pid}' 2>/dev/null)" || continue
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "  pane ${pane_name} 죽음 — 재시작."
+      "${LAUNCH_SCRIPT}" "${tgt}" "${persona}" "${pane_name}" || echo "  WARN: ${pane_name} 재시작 실패"
+      RESTARTED=$(( RESTARTED + 1 ))
+    fi
+  done
+  if [[ $RESTARTED -eq 0 ]]; then
+    echo "모든 페인 alive — 변경 없음."
+  else
+    echo "${RESTARTED}개 페인 재시작."
+  fi
   if [[ -n "${TMUX:-}" ]]; then
     echo "Switch from inside tmux:  tmux switch-client -t ${SESSION_NAME}"
   else
