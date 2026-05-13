@@ -58,6 +58,10 @@ Entity rules (BLOCKING when violated; reinforced by `data-access`):
 
 ## Kotlin idioms
 
+### Warning suppression — forbidden (BLOCKING)
+
+**`@Suppress(...)` is forbidden across all code.** No exceptions, no justification comments. Fix the warning's root cause by redesigning the code. Roastmaster auto-rejects any PR containing `@Suppress`.
+
 ### Nullability
 
 - Public APIs: avoid `?`-typed parameters and return values. Use overloads or default values instead.
