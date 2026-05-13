@@ -83,6 +83,16 @@ Invariant across `/feat` and `/task`, small/medium/large:
 5. CI green (build, lint, type check, tests).
 6. PR within size limits (`git-flow`: 400 soft / 800 hard).
 
+### Worker escalation invariants
+
+Workers must never get stuck in a silent retry loop. Three layered guards apply to every ticket:
+
+1. **Per-failure `error_signature` check** — after every build/test invocation, the worker computes `error_signature` and compares it against `last_error_signature`. Match → `error_2x` escalation immediately, before any further code edit. The retry unit is **one build/test command execution**, not a logical "cycle." See persona `§ Workflow` quality-verification step.
+2. **Context-pressure preemptive escalation** — if the worker's own context usage exceeds 80% while a build/test failure is still unresolved, it must escalate with `reason: context_pressure`. Token pressure degrades the §Escalation-Conditions §1 evaluation; cut the loop early.
+3. **Technoking surrogate watchdog** — for every action cycle, Technoking runs `ticket-watchdog.sh <pane>` against each in-flight worker pane. If the watchdog reports `error_loop | rev_repeat | rev_idle`, Technoking re-invokes it with `--dispatch-surrogate` to publish a surrogate `error_2x` INBOX and touch the pane's `.runtime/<pane>.complete` sentinel (forcing the idle loop to reclaim the pane). The standard rescue procedure then runs as if the worker had self-escalated. See `agents/technoking.md § Surrogate Escalation`.
+
+These guards stack — (1) and (2) are the worker's responsibility; (3) is Technoking's safety net when (1) or (2) misfires.
+
 Roastmaster's authority is final. A BLOCKING from Roastmaster halts merge until resolved or escalated.
 
 ## Stop policy details

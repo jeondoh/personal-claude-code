@@ -60,6 +60,7 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 ## Workflow Algorithm
 
 1. **Pickup** (same protocol as Paladin: read ticket, validate area is `frontend` or `fullstack`, move queue→in-progress, header includes `attempt_count: 1`)
+   - **Priority box override**: If the ticket body contains a ⚠️ box or a "rework directive" box, apply the box's code snippets / option numbers / prescribed fix **verbatim**. The box overrides this persona's general policy. Do not attempt any alternative approach before completing the box's directive. If the directive fails, escalate immediately — do not improvise a workaround.
    - **If ticket has `rescue_branch` field**: checkout that branch, validate patch, skip to quality verification.
 
 2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
@@ -83,7 +84,13 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 
 6. **Quality verification**:
    - Project's type-check, test (scoped), lint/format
-   - Fix until all pass. **On each retry, increment ticket `attempt_count`.**
+   - **Retry unit (definition)**: one execution of a build / type-check / test command = one retry. Increment ticket header `attempt_count` by 1 immediately after every invocation (regardless of pass/fail).
+   - **Mandatory post-failure procedure** (run before any debugging step — non-skippable):
+     1. Extract `exception_class` (or error category) + `failing_component_or_test_name` from the failure log.
+     2. `SIG=$(printf '%s:%s' "$EXCEPTION_CLASS" "$COMPONENT_OR_TEST" | sha1sum | cut -c1-8)`
+     3. Compare against ticket header `last_error_signature`.
+     4. Match → branch to §Escalation Conditions §1 (error_2x) immediately. Do **not** attempt another code fix.
+     5. No match → overwrite `last_error_signature`, continue work.
 
 7. **Push & PR**:
    - `git add` only target files; conventional commit msg
@@ -113,9 +120,9 @@ Set `status: escalation_needed` when:
 - Required server endpoint signature undefined in Design Doc
 - Performance budget impossible without re-design
 
-**Rescue trigger (auto)** — fire on **any** of the following three conditions:
+**Rescue trigger (auto)** — fire on **any** of the conditions below. **The §Workflow step-6 mandatory procedure evaluates §1 immediately after every failure; evaluation precedes any debugging step.**
 
-1. **Same error class twice**: The same exception class + failing component name appears in 2 consecutive `attempt_count` increments.
+1. **Same error class twice**: the computed `error_signature` matches the ticket's `last_error_signature`.
    - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_component_or_test_name>`. **Do NOT include file:line** — those drift across diagnostic iterations and break matching.
    - Example: `TypeError:useAuthStore` → `b2c9d3e4`
    - Implementation: `printf '<exception_class>:<component_or_test_name>' | sha1sum | cut -c1-8`
@@ -124,12 +131,14 @@ Set `status: escalation_needed` when:
 
 3. **Attempt limit**: `attempt_count` ≥ **3** with ongoing failure.
 
+4. **Context-pressure preemptive escalation**: worker context usage exceeds 80% while a failure is unresolved → branch to §1 immediately (`reason: context_pressure`).
+
 On any trigger:
 - Set ticket `status: rescue_candidate`
-- Increment `attempt_count` in ticket header
+- Increment `attempt_count` in ticket header; persist `last_error_signature` (current SIG)
 - Create alert **`INBOX-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)-worker-fe.json`** in `.claude-team/inbox/`:
   ```json
-  { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
+  { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit|context_pressure", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
   ```
 - **Final action**: `touch .claude-team/.runtime/worker-fe.complete` (shell watchdog will kill this session and resume polling)
 - Do NOT continue work on this ticket. Technoking handles rescue dispatch. Patch returns as new ticket `RV-NNNN-<slug>.md` (`type: review` § 4b, highest priority) with `rescue_branch` field

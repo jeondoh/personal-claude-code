@@ -74,11 +74,15 @@ files_in_scope:
   - apps/api/src/payments/charge.kt
   - apps/api/src/payments/idempotency_key.kt
 depends_on: [T-0041]                              # other tickets that must merge first
+attempt_count: 1                                  # incremented on every build/test invocation (worker)
+last_error_signature: a3f8b2e1                    # 8-char SHA-1 of <exception_class>:<failing_bean_or_test>; updated by worker after every failure
 created: 2026-05-11T14:30:00+09:00
 updated: 2026-05-11T14:30:00+09:00
 author: technoking
 ---
 ```
+
+`attempt_count` and `last_error_signature` are **worker-managed**: Technoking writes neither at dispatch time. The worker initializes `attempt_count: 1` on claim and overwrites `last_error_signature` after every build/test failure (see `agents/persistence-paladin.md § Workflow step 4` and `agents/pixel-wizard.md § Workflow step 6`). If the freshly computed signature matches the existing field, the worker branches to its `error_2x` escalation path immediately.
 
 ### 2. Review report (`type: review-report`)
 

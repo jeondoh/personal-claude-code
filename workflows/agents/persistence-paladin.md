@@ -65,6 +65,7 @@ Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slu
    - Validate: area is `backend` or `fullstack`, target files within your worktree
    - Move: queue → in-progress
    - Update header: `status: in-progress | worker: persistence-paladin | attempt_count: 1 | started: <ts>`
+   - **Priority box override**: If the ticket body contains a ⚠️ box or a "rework directive" box, apply the box's code snippets / option numbers / prescribed fix **verbatim**. The box overrides this persona's general policy. Do not attempt any alternative approach before completing the box's directive. If the directive fails, escalate immediately — do not improvise a workaround.
    - **If ticket has `rescue_branch: rescue/T-{NNN}` field** (rescue validation cycle): checkout that branch instead, validate the patch, run quality checks, skip to step 4.
 
 2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
@@ -78,7 +79,13 @@ Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slu
    - Run project's build/compile (per `CLAUDE.md`)
    - Run project's test (scoped to your changes)
    - Run project's lint/format check (if configured)
-   - Fix until all pass. **On each retry, increment ticket header `attempt_count`.**
+   - **Retry unit (definition)**: one execution of a build/test command = one retry. Increment ticket header `attempt_count` by 1 immediately after every invocation (regardless of pass/fail; any re-run of the same command always increments).
+   - **Mandatory post-failure procedure** (run before any debugging step — non-skippable):
+     1. Extract `exception_class` + `failing_bean_or_test_name` from the failure log.
+     2. `SIG=$(printf '%s:%s' "$EXCEPTION_CLASS" "$TEST_NAME" | sha1sum | cut -c1-8)`
+     3. Compare against ticket header `last_error_signature`.
+     4. Match → branch to §Escalation Conditions §1 (error_2x) immediately. Do **not** attempt another code fix.
+     5. No match → overwrite `last_error_signature` with the new SIG, persist `attempt_count`, continue work.
 
 5. **Push & PR**:
    - `git add` only target files; conventional commit msg
@@ -110,9 +117,9 @@ Set ticket `status: escalation_needed` (do not try to fix) when:
 
 Include `escalation_reason` in ticket. Technoking handles.
 
-**Rescue trigger (auto)** — fire on **any** of the following three conditions:
+**Rescue trigger (auto)** — fire on **any** of the conditions below. **The §Workflow step-4 mandatory procedure evaluates §1 immediately after every build/test failure; evaluation precedes any debugging step.**
 
-1. **Same error class twice**: The same exception class + failing bean/test name appears in 2 consecutive `attempt_count` increments.
+1. **Same error class twice**: the computed `error_signature` matches the ticket's `last_error_signature`.
    - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_bean_or_test_name>`. **Do NOT include file:line** — those drift across diagnostic iterations and break matching.
    - Example: `NoSuchBeanDefinitionException:ObjectMapper` → `a3f8b2e1`
    - Implementation: `printf '<exception_class>:<test_name>' | sha1sum | cut -c1-8`
@@ -121,12 +128,14 @@ Include `escalation_reason` in ticket. Technoking handles.
 
 3. **Attempt limit**: `attempt_count` ≥ **3** with ongoing failure.
 
+4. **Context-pressure preemptive escalation**: worker's own context usage exceeds 80% while a build/test failure is still unresolved → branch to §1 immediately (`reason: context_pressure`). Token pressure degrades debugging judgment; escalate before that happens.
+
 On any trigger:
 - Set ticket `status: rescue_candidate`
-- Increment `attempt_count` in ticket header
+- Increment `attempt_count` in ticket header; persist `last_error_signature` (current SIG)
 - Create alert **`INBOX-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)-worker-be.json`** in `.claude-team/inbox/`:
   ```json
-  { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
+  { "kind": "error_2x", "ticket": "T-NNNN", "reason": "build_loop|timeout|attempt_limit|context_pressure", "error_signature": "<8-char-sha1>", "rev_count": <N>, "elapsed_minutes": <M> }
   ```
 - **Final action**: `touch .claude-team/.runtime/worker-be.complete` (shell watchdog will kill this session and resume polling)
 - Do NOT continue work on this ticket. Technoking handles rescue dispatch.
