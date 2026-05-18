@@ -5,219 +5,342 @@ description: Kotlin idioms and Spring Boot conventions for backend code in this 
 
 # Kotlin + Spring Boot — Core
 
-Stack-specific overlay on `coding-principles`. When this skill and `coding-principles` agree, follow `coding-principles`. When they diverge, this skill wins for Kotlin/Spring code.
+Stack overlay on `coding-principles`. On conflict, this skill wins for Kotlin/Spring code.
+
+**The bar, in one line:** rich domain · thin controllers · narrow exceptions · declarative cross-cutting.
+
+Every rule is **BLOCKING** unless tagged `(SHOULD)`. Roastmaster auto-rejects PRs violating a BLOCKING rule.
 
 ## Version handling — detect, don't assume
 
-This skill applies to **whichever versions are actually installed in the project**, not a fixed pin. The values in the reference table below were observed at skill authoring time (2026-05); the real source of truth is `build.gradle.kts`. Worker MUST detect first, then verify against official docs when the installed version is outside training-data confidence.
+Snapshot below was observed at authoring time (2026-05). Source of truth is `build.gradle.kts`.
 
-### Reference (skill authoring snapshot, not a mandate)
-
-| Item | Reference | Detect from |
+| Item | Snapshot | Detect from |
 |---|---|---|
-| JDK | 24 | `build.gradle.kts` → `java.toolchain.languageVersion` |
-| Kotlin | 2.2+ | `build.gradle.kts` → `kotlin("jvm") version "..."` |
-| Spring Boot | 4+ | `build.gradle.kts` → `id("org.springframework.boot") version "..."` |
-| Build | Gradle Kotlin DSL (convention) | (project convention) |
+| JDK | 24 | `java.toolchain.languageVersion` |
+| Kotlin | 2.2+ | `kotlin("jvm") version "..."` |
+| Spring Boot | 4+ | `id("org.springframework.boot") version "..."` |
+| Build | Gradle Kotlin DSL | (convention) |
 
-Library coordinates (Spring starters, JDBC drivers, JSON modules, test runners) are **not pinned** at the workflow level — pick what each ticket needs and verify per protocol below.
+### Protocol
 
-### Protocol (BLOCKING when violated)
+1. **Detect** Boot / Kotlin / JDK from `build.gradle.kts` at start of work. Record in design notes or PR description.
+2. **Verify before writing** when (a) installed version is newer than confident training, or (b) adding a starter coordinate, choosing a config key, using a Spring Framework API, or relying on auto-configuration. WebFetch:
+   - https://docs.spring.io/spring-boot/reference/ · https://docs.spring.io/spring-framework/reference/ · https://kotlinlang.org/docs/
+3. **Volatile across majors** (always re-verify): starter artifact names, `spring.*` keys, auto-config toggles, Kotlin compiler args. **Boot 4+** is Jakarta-only — `javax.*` forbidden; do not trust Boot 3 knowledge against Boot 4 code.
+4. **Never invent** starter coordinates, property keys, plugin IDs, or default behaviors. Uncertain → WebFetch. Ambiguous → escalate via `inbox/`.
+5. **Record** in PR description: `Verified against Spring Boot 4.0 § Data Access (2026-05-11)`.
 
-1. **Detect** Spring Boot, Kotlin, JDK from `build.gradle.kts` at the start of work. Record in design notes or PR description.
-2. **Compare to training cutoff**. Evergreen content in this skill (entity rules, immutability, `allOpen` + JPA semantics, transactional boundaries, layering, security defaults — *as concepts*) applies broadly across recent majors.
-3. **If the installed version is newer than your confident training** OR you are about to add a starter coordinate, choose a config key, use a Spring Framework API, or rely on auto-configuration behavior: **MUST verify via official docs before writing code**.
-   - Spring Boot reference: https://docs.spring.io/spring-boot/reference/
-   - Spring Framework reference: https://docs.spring.io/spring-framework/reference/
-   - Kotlin docs: https://kotlinlang.org/docs/
-   - Use the WebFetch tool to fetch the specific section.
-4. **Particularly version-volatile** (always re-verify): starter artifact names (many moved across Boot 3 → 4), property keys under `spring.*` (renamed/relocated between versions), auto-configuration toggles, Kotlin compiler args (Kotlin 2.x introduced new defaults; check before adding `-X` flags).
-5. **Boot 3 → 4 specifically**: Jakarta migration is complete on 4 (`jakarta.persistence.*`, `jakarta.servlet.*`). `javax.*` is forbidden on 4+. Many starters were renamed. If installed Boot is 4+ **always cross-check against current Spring Boot 4 docs**, do not trust Boot 3 knowledge.
-6. **Never invent** starter coordinates, property keys, plugin IDs, or default behaviors from training data. When uncertain, WebFetch → read → code. If docs are ambiguous, escalate via `inbox/` rather than guess.
-7. **Record verification** in PR description: e.g., `Verified against Spring Boot 4.0 § Data Access (2026-05-11)`. Roastmaster & codex use this to scope their review.
-
-### Kotlin compiler args — verify before applying
-
-The args below were standard at skill authoring time but Kotlin major bumps can change defaults. Verify against `https://kotlinlang.org/docs/compiler-reference.html` for the installed Kotlin version before adding to `build.gradle.kts`.
+### Kotlin compiler args
 
 ```kotlin
-// Verify these still exist and have the documented semantics for your Kotlin version.
 freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
 ```
 
-- `-Xjsr305=strict` — treat external nullability annotations strictly.
-- `-Xannotation-default-target=param-property` — Kotlin 2.2 default for annotations on constructor params; avoids the param-vs-property surprise on JPA + validation annotations. **If installed Kotlin ≥ 2.3, check whether this is now default-on and the flag is obsolete.**
+`-Xjsr305=strict` → strict external-nullability annotations. `-Xannotation-default-target=param-property` → Kotlin 2.2 default for constructor-param annotations (resolves param-vs-property on JPA/validation). For Kotlin ≥ 2.3 verify whether the second flag is now default-on and obsolete.
 
-**JPA + `allOpen` rule (entity authoring)**: the `kotlin("plugin.jpa")` plugin auto-applies `allOpen` for `jakarta.persistence.{Entity, MappedSuperclass, Embeddable}`. Workers do **not** add `open` keyword manually and do **not** write a no-arg constructor manually — both are synthesized.
+### JPA + `allOpen`
 
-Entity rules (BLOCKING when violated; reinforced by `data-access`):
+`kotlin("plugin.jpa")` auto-applies `allOpen` for `jakarta.persistence.{Entity, MappedSuperclass, Embeddable}` and synthesizes the no-arg constructor. **Do not** add `open` manually. **Do not** write a no-arg constructor manually. **`data class` for JPA entity is forbidden** — auto `equals`/`hashCode` walks lazy proxies → OOM. Plain `class`; `equals`/`hashCode` on surrogate ID only. (Reinforced by `data-access`.)
 
-- **Don't use `data class` for JPA entities.** Auto-generated `equals`/`hashCode` walk lazy proxies and recurse to OOM. Use plain `class` with equals/hashCode based on the surrogate ID only.
-- **Don't add `open`** to entity classes — `allOpen` plugin does it.
-- **Don't write a no-arg constructor** — `kotlin("plugin.jpa")` synthesizes it.
+## Architecture — Clean Architecture (simple)
 
-## Kotlin idioms
-
-### Warning suppression — forbidden (BLOCKING)
-
-**`@Suppress(...)` is forbidden across all code.** No exceptions, no justification comments. Fix the warning's root cause by redesigning the code. Roastmaster auto-rejects any PR containing `@Suppress`.
-
-### Nullability
-
-- Public APIs: avoid `?`-typed parameters and return values. Use overloads or default values instead.
-- Internal: `?` is fine when "absent" is genuinely a domain state. `lateinit` only for DI-injected fields where construction order forbids constructor injection.
-- `!!` is forbidden in production code. If you genuinely need to assert non-null, use `requireNotNull(x) { "<context>" }` so the failure carries context.
-- `?.let { }` for optional side effects; do not nest more than 2 deep.
-
-### Data classes vs classes vs `value class`
-
-- DTOs, request/response, domain values without behavior → `data class`.
-- Domain entities with invariants → `class` with private constructor + factory or `init` block.
-- Single-property wrappers carrying type-level meaning (`UserId`, `Email`) → `@JvmInline value class`.
-
-### Immutability
-
-- `val` over `var` always. `var` only inside narrow function-local scope.
-- `List<T>` (read-only) for parameters and return types. `MutableList<T>` only inside a function.
-- Collections returned from public APIs are read-only views.
-
-### Functions
-
-- Top-level functions for stateless operations. Don't make a class just to hold static helpers.
-- Extension functions for adding domain-specific verbs to existing types — use sparingly; prefer regular functions when the receiver is yours.
-- `inline fun` for higher-order functions on hot paths only. Profile before inlining.
-
-### Coroutines
-
-- Suspending functions for I/O and async coordination. Spring 6 / Boot 4 supports coroutines on controllers.
-- Structured concurrency: every coroutine runs inside a `coroutineScope { }` or a Spring-provided scope. No `GlobalScope`.
-- `Dispatchers.IO` for blocking JDBC / file I/O. `Dispatchers.Default` for CPU-bound. Don't use `Dispatchers.Main` server-side.
-- `runBlocking` only in `main` and tests. Never in production request handlers.
-- **`@Transactional` does not propagate across coroutine context switches.** Spring's transaction state is thread-local; `withContext(Dispatchers.IO)` switches threads and loses it. Patterns:
-  - For suspending controllers, place `@Transactional` on the suspending service method and let Spring's coroutine-aware tx manager keep it attached.
-  - When you need `withContext(Dispatchers.IO)` for blocking JDBC inside a service call, keep the entire DB conversation **inside one transactional boundary** — do not span the boundary across the dispatcher switch.
-  - BLOCKING: `@Transactional` outside a `withContext(Dispatchers.IO)` block that contains the JDBC calls — the IO dispatcher loses thread-local tx state and writes commit on the wrong boundary.
-
-## Spring Boot conventions
-
-### Architecture — Clean Architecture (simple)
-
-We use a **simple Clean Architecture** — not full hexagonal. Four layers, dependencies point inward toward `domain`:
+Four layers; dependencies point inward toward `domain`. No hexagonal Ports/Adapters, no Interactor classes. Boring on purpose.
 
 ```
 api  →  application  →  domain  ←  infrastructure
                                    (implements interfaces declared in application)
 ```
 
-| Layer | Responsibility | May depend on | Must NOT depend on |
+| Layer | Owns | May depend on | Forbidden |
 |---|---|---|---|
-| `api` | HTTP/JSON only — request mapping, validation, error envelope. No business logic. | `application` (services) | `domain` directly, `infrastructure` |
-| `application` | Use cases. One `@Service` ≈ one user story. Orchestrates domain + repository **interfaces**. | `domain`, repository interfaces it declares itself | `infrastructure`, `api` |
-| `domain` | Pure Kotlin. Entities, value objects, domain services. Framework-free. | nothing in this codebase | everything else |
-| `infrastructure` | Concrete adapters — JPA repositories, external HTTP clients, file/queue I/O. **Implements** interfaces from `application`. | `application` (interfaces), `domain` (entities/values) | `api` |
+| `api` | HTTP/JSON shape, validation, error envelope | `application` | `domain` direct, `infrastructure` |
+| `application` | Use cases, transactions, repo orchestration, mapping | `domain`, repo interfaces declared here | `infrastructure`, `api` |
+| `domain` | Entities, value objects, domain services, sealed errors. Framework-free. | nothing | everything else |
+| `infrastructure` | JPA repos, HTTP clients, file/queue, aspects, filters | `application` interfaces, `domain` | `api` |
 
-**Dependency Inversion (DIP)** — repository interfaces are declared **in the `application` layer** (e.g., `application/UserRepository.kt`); the JPA implementation lives in `infrastructure` (e.g., `infrastructure/persistence/JpaUserRepository.kt`) and is wired by Spring DI. This is the only abstraction we add — we deliberately do **not** introduce hexagonal Ports/Adapters or use-case Interactor classes. Keep it boring.
+**Dependency Inversion (DIP).** Repository interfaces live in `application/`; JPA implementations live in `infrastructure/`. Spring DI wires them.
 
-**BLOCKING patterns Roastmaster rejects:**
-- `import org.springframework.*` (or any framework import) inside `domain/`
-- `application` directly importing a concrete class from `infrastructure/` (interface-only DIP violation)
-- `api` calling `infrastructure` and skipping `application`
-- Repository interface declared inside `infrastructure/` (must live in `application/`)
+```kotlin
+// application/UserRepository.kt — framework-free
+interface UserRepository { fun findById(id: UserId): User?; fun save(user: User): User }
+
+// infrastructure/persistence/JpaUserRepository.kt
+@Repository
+class JpaUserRepository(private val jpa: SpringDataUserRepository) : UserRepository { /* ... */ }
+```
+
+### BLOCKING — layer crimes
+
+Most "smelly code" is a layer doing another layer's job.
+
+- **`api/`** — calls `@Repository` directly; catches domain exceptions to shape responses (advice does it); builds aggregates by hand instead of via domain factory; reads/writes `MDC`; branches that encode business rules.
+- **`application/`** — computes business invariants (that's on the entity); holds mutable state; catches generic `Exception` "to be safe"; calls another bounded context's `domain/` or `infrastructure/` directly.
+- **`domain/`** — imports Spring / JPA / Jackson / anything from `infrastructure/`; performs I/O including logging; exposes public setters (other than JPA-forced `var`).
+- **`infrastructure/`** — imports from `api/`; returns JPA `@Entity` or Hibernate proxy across the interface boundary (map at boundary); lets `SQLException`/`IOException`/`HttpClientErrorException` leak upward (translate to sealed domain error).
+- **Cross-cutting** — repository interface declared in `infrastructure/` (must live in `application/`); cross-context call into another context's `domain/` or `infrastructure/` (must go through that context's `application/`).
+
+## Domain modeling — rich, not anemic
+
+The `domain` layer owns business rules. `@Service` orchestrates; it does not compute.
+
+1. **Entities own their invariants.** `private constructor` + `companion object` factory (or `init`) that validates with `require`. No half-built entity escapes construction.
+2. **Tell, don't ask.** If a service reads a field, mutates it, and writes back, the verb belongs on the entity. `user.activate()` not `user.status = ACTIVE`.
+3. **No public setters on domain entities.** Mutation only through intention-revealing methods (`order.confirm()`, `account.withdraw(amount)`).
+4. **Value objects for typed concepts.** `Email`, `Money`, `UserId` — `@JvmInline value class` for single field, `data class` for multi-field. Validate in `init`. Never pass raw `String`/`Long` for a typed concept across layer boundaries.
+5. **Domain service is the last resort.** Reach for `domain/XxxPolicy.kt` only when the rule spans multiple aggregates and cannot live on either entity.
+6. **`enum class`** for closed sets of identifiers (status, roles). **`sealed class`** when each variant carries different data or behavior.
+7. **Time** through an injected `Clock`. Never `Instant.now()` / `LocalDateTime.now()` directly in domain or application code. Store `Instant` (UTC) at persistence; render local times only at the api edge.
+8. **Money** as `BigDecimal` with explicit scale and `RoundingMode`, wrapped in a `Money` value object (currency + amount together).
+
+```kotlin
+// Anti-pattern: service computes status/lines invariants, mutates entity fields directly.
+// Correct: entity owns the rule; service orchestrates.
+
+class Order private constructor(/* ... */) {
+    fun confirm(now: Instant) {
+        check(status == PENDING)  { "order $id is not pending" }
+        check(lines.isNotEmpty()) { "order $id has no lines" }
+        status = CONFIRMED
+        confirmedAt = now
+    }
+    companion object {
+        fun create(/* ... */): Order { require(/* ... */); return Order(/* ... */) }
+    }
+}
+
+@Service
+class OrderService(private val repo: OrderRepository, private val clock: Clock) {
+    @Transactional
+    fun confirm(id: OrderId) {
+        val order = repo.findById(id) ?: throw OrderError.NotFound(id)
+        order.confirm(clock.instant())
+        repo.save(order)
+    }
+}
+```
+
+## DTO / Command / Query — explicit layer boundaries
+
+Five DTO families. Do not collapse them.
+
+| Crossing | Type | Naming | Lives in |
+|---|---|---|---|
+| HTTP → controller | Request | `<Verb><Noun>Request` | `api/` |
+| controller → service (write) | Command | `<Verb><Noun>Command` | `application/` |
+| controller → service (read) | Query | `<Noun>Query` | `application/` |
+| service → controller (read) | View / Result | `<Noun>View` or `<Verb><Noun>Result` | `application/` |
+| controller → HTTP | Response | `<Noun>Response` | `api/` |
+
+1. **≥ 3 parameters on a public method (controller / service / repo interface) → introduce a Command/Query.** Two related primitives that always travel together (`email + password`) → group at count 2. Anti-patterns: `fun register(email, password, displayName, locale, marketingOptIn)`, `fun search(name?, status?, from?, to?, page, size)` — both unnamed Commands/Queries.
+2. **No `@Entity` on the HTTP wire.** Controllers neither accept nor return an entity; map at the api↔application boundary. `fun update(user: User)` on a controller is mass-assignment.
+3. **CQS.** A Command returns `Unit` or the new aggregate's id. A Query is `readOnly = true` and returns a View. A method that mutates *and* returns a rich view — split it.
+4. **DTOs are `data class`, immutable, framework-free** apart from Bean Validation on the Request. No JPA on Commands/Queries/Views.
+5. **Mapping lives in `application/`** (or a dedicated `XxxMapper.kt`), never in `domain/`.
+6. **No `Map<String, Any>` or anonymous data classes** to dodge the rule — that's a Command with no name; name it.
+
+```kotlin
+// api/UserController.kt
+data class RegisterUserRequest(
+    @field:Email val email: String,
+    @field:Size(min = 8) val password: String,
+    @field:NotBlank val displayName: String,
+)
+
+@PostMapping("/users")
+fun register(@Valid @RequestBody req: RegisterUserRequest): UserResponse {
+    val cmd = RegisterUserCommand(Email(req.email), Password(req.password), req.displayName)
+    return UserResponse.from(userService.register(cmd))
+}
+
+// application/RegisterUserCommand.kt
+data class RegisterUserCommand(val email: Email, val password: Password, val displayName: String)
+```
+
+## Exception handling
+
+`try-catch` is a last resort. Most code lets exceptions propagate to `@RestControllerAdvice`.
+
+1. **No `try-catch` in `api/` or `application/` for control flow.** Validation → `require` / `check` / `requireNotNull` / `@Valid`. Business-rule violation → throw a sealed domain exception and propagate.
+2. **`try-catch` allowed only at three sites:**
+   - `infrastructure/` adapter translating a library exception → domain exception. **Must rethrow.** Log-and-swallow is BLOCKING.
+   - `@RestControllerAdvice` mapping domain exceptions → error envelope.
+   - Resource cleanup — prefer `use { }` / `try-finally` over `try-catch`.
+3. **No generic catch.** `catch (e: Exception)` / `catch (e: Throwable)` anywhere is BLOCKING. Catch the narrowest type.
+4. **No swallow.** `catch { }`, `catch { log.warn(...) }` with no rethrow, `catch { return null }` without semantic justification.
+5. **Model business errors as `sealed class`.** One sealed hierarchy per bounded context, extending `RuntimeException`. Advice exhausts the hierarchy with `when` — compiler enforces completeness. Plain `RuntimeException("...")` for business errors is BLOCKING.
+6. **`runCatching { }`** allowed only when (a) immediately mapped to a domain `Result`, or (b) bridging non-Kotlin code with checked exceptions. Wrapping a whole service body is BLOCKING.
+7. **Context on rethrow.** Translating in `infrastructure/`: attach the failed operation — `throw PaymentGatewayUnavailable("authorize chargeId=$id", cause)`. Bare `throw DomainError(cause)` is BLOCKING.
+8. **No `@Throws` chains** across layers to simulate checked exceptions. KDoc the contract on public service methods when needed.
+
+```kotlin
+// domain/OrderErrors.kt
+sealed class OrderError(message: String, cause: Throwable? = null) : RuntimeException(message, cause) {
+    class NotFound(val id: OrderId)         : OrderError("order $id not found")
+    class AlreadyConfirmed(val id: OrderId) : OrderError("order $id already confirmed")
+    class EmptyOrder(val id: OrderId)       : OrderError("order $id has no lines")
+}
+
+// api/GlobalExceptionHandler.kt
+@RestControllerAdvice
+class GlobalExceptionHandler {
+    @ExceptionHandler(OrderError::class)
+    fun handle(e: OrderError): ResponseEntity<ErrorEnvelope> = when (e) {
+        is OrderError.NotFound         -> status(404).body(ErrorEnvelope("order.not_found", e.message!!))
+        is OrderError.AlreadyConfirmed -> status(409).body(ErrorEnvelope("order.already_confirmed", e.message!!))
+        is OrderError.EmptyOrder       -> status(422).body(ErrorEnvelope("order.empty", e.message!!))
+    }
+}
+```
+
+## Cross-cutting concerns — declarative via AOP
+
+Anything that applies to "many methods regardless of business meaning" is declarative, not sprinkled in service bodies.
+
+| Concern | Mechanism | Where |
+|---|---|---|
+| Error envelope | `@RestControllerAdvice` | `api/` (one per app) |
+| MDC enrichment (request id, user id, tenant) | `OncePerRequestFilter` + `MDC.put` / `MDC.clear` in `finally` | `api/` filter |
+| Audit log of state-changing use cases | `@Audited` annotation + `@Aspect @Around` | `infrastructure/audit/` |
+| Latency / counters | Micrometer `@Timed` / `@Counted`, or aspect on a marker annotation | `infrastructure/observability/` |
+| Distributed tracing | Micrometer Tracing auto-config | auto-config |
+| Coarse authorization | `@PreAuthorize` / `@PostAuthorize` on `@Service` | `application/` |
+| Resource authorization | Domain method on the aggregate (`order.assertOwnedBy(actor)`) | `domain/` |
+| Transactions | `@Transactional` | `application/` |
+| Retry / circuit breaker for outbound calls | Resilience4j (`@Retry`, `@CircuitBreaker`) | `infrastructure/` |
+
+1. **Service body must not touch `MDC`.** Filter/interceptor sets it at the request edge; `finally` clears.
+2. **No manual audit `log.info(...)` inside service bodies.** Use `@Audited("order.confirm")` + an `@Aspect`. Operational `info` (milestones) is fine.
+3. **No try-catch-then-Micrometer-increment.** Use `@Counted(value = "...", recordFailuresOnly = true)` or wrap in an aspect.
+4. **No `SecurityContextHolder.getContext().authentication` inside business logic.** Read actor at the application boundary and pass `Actor` as a typed parameter (or onto the Command).
+5. **AOP advice contains no business rules.** Authorization aspect = "is this caller allowed at all"; business rule = "is this state transition legal" — the latter belongs on the entity.
+
+```kotlin
+// infrastructure/audit/Audited.kt — annotation; @Aspect @Around impl elided (standard pattern)
+@Target(AnnotationTarget.FUNCTION) @Retention(AnnotationRetention.RUNTIME)
+annotation class Audited(val action: String)
+
+// application/OrderService.kt — usage
+@Service
+class OrderService(/* ... */) {
+    @Audited("order.confirm")
+    @Transactional
+    fun confirm(id: OrderId) { /* ... */ }
+}
+```
+
+## Kotlin idioms
+
+### Warning suppression — forbidden
+
+`@Suppress(...)` is forbidden across all code. No exceptions, no justification comments. Fix the warning's root cause by redesigning the code.
+
+### Nullability
+
+- Public APIs avoid `?`-typed parameters and return values. Use overloads or default values.
+- Internal `?` is fine when "absent" is genuinely a domain state. `lateinit` only for DI fields where constructor injection is impossible.
+- `!!` is forbidden in production. To assert non-null: `requireNotNull(x) { "<context>" }`.
+- `?.let { }` for optional side effects; nesting > 2 deep is BLOCKING (extract a helper).
+- `Optional<T>` is forbidden in Kotlin code — use nullable.
+
+### Data classes vs classes vs `value class`
+
+- DTOs, Requests/Responses, Commands/Queries, domain values without behavior → `data class`.
+- Domain entity with invariants → `class` with private constructor + factory or `init`.
+- Single-property wrapper for type meaning (`UserId`, `Email`) → `@JvmInline value class`.
+
+### Immutability
+
+- `val` over `var` always. `var` only inside narrow function-local scope or where JPA forces it.
+- `List<T>` (read-only) for parameters and return types. `MutableList<T>` only inside a function body.
+- Collections returned from public APIs are read-only views.
+
+### Functions
+
+- Top-level functions for stateless operations. Don't create a class just to hold static helpers.
+- Extension functions for adding domain verbs to existing types — sparingly; prefer regular functions when the receiver is yours.
+- `inline fun` for higher-order functions on hot paths only. Profile before inlining.
+
+### Coroutines
+
+- Suspending functions for I/O and async coordination. Spring 6 / Boot 4 supports coroutines on controllers.
+- Structured concurrency — every coroutine inside `coroutineScope { }` or a Spring-provided scope. No `GlobalScope`.
+- `Dispatchers.IO` for blocking JDBC / file I/O; `Dispatchers.Default` for CPU-bound; never `Dispatchers.Main` server-side.
+- `runBlocking` only in `main` and tests.
+- **`@Transactional` does not propagate across coroutine context switches.** Spring's tx state is thread-local; `withContext(Dispatchers.IO)` switches threads and loses it. Suspending controllers → `@Transactional` on the suspending service method (coroutine-aware tx manager keeps it attached). `withContext(Dispatchers.IO)` for blocking JDBC → keep the entire DB conversation **inside one transactional boundary**; crossing the boundary across the dispatcher switch is BLOCKING.
+
+## Spring Boot conventions
 
 ### Dependency injection
 
 - Constructor injection always. No `@Autowired` on fields.
-- `@Service`, `@Repository`, `@RestController`, `@Configuration` — use the most specific stereotype.
-- `@Component` only when none of the above applies.
-- Configuration via `@ConfigurationProperties` data class, validated with `@Validated`.
+- Most specific stereotype: `@Service`, `@Repository`, `@RestController`, `@Configuration`. `@Component` only if none fits.
+- `@ConfigurationProperties` data class, validated with `@Validated`. Prefer over `@Value`.
 
 ### Configuration
 
-- `application.yml` (not `.properties`) for hierarchical config.
-- Profiles for environment differences (`application-dev.yml`, `application-test.yml`).
-- Secrets via env var or vault, not in YAML. Use `${VAR_NAME}` placeholders.
-- `@ConfigurationProperties` over `@Value` — type-safe, testable, refactorable.
+- `application.yml` (not `.properties`). Profiles for environments (`application-dev.yml`, etc.).
+- Secrets via env var or vault — `${VAR_NAME}` placeholders. Never in YAML.
 
 ### Web layer
 
-- `@RestController` for JSON APIs. `@Controller` for server-rendered pages (rare in this codebase).
-- Request/response classes are `data class` records, not entities. Map between layers explicitly.
-- Validation with `@Valid` + `jakarta.validation` annotations on the DTO.
-- Error handling via a single `@RestControllerAdvice` that maps exceptions to a uniform error envelope (`{ error: { code, message, details } }`). No exception leaks raw stack traces to clients.
+- `@RestController` for JSON. `@Controller` for server-rendered pages (rare).
+- Controllers stay **thin**: validate → map Request→Command → call service → map View→Response. No business branches.
+- Validation: `@Valid` + `jakarta.validation` on Request.
+- Error envelope: one `@RestControllerAdvice`, uniform shape `{ error: { code, message, details } }`. No raw stack traces to clients.
 
 ### Logging
 
-- SLF4J via Kotlin Logging (`KotlinLogging.logger {}`).
-- Structured logging where possible (key-value pairs in MDC).
-- Log levels:
-  - `error` — actionable: someone or something must respond.
-  - `warn` — degraded but handled.
-  - `info` — milestone events (startup, shutdown, request received at boundary).
-  - `debug` — verbose, off in prod.
-- Never log secrets, full request bodies of unbounded size, or full stack traces of expected business exceptions (e.g., validation failures).
+- SLF4J via Kotlin Logging (`KotlinLogging.logger {}`). Structured (key-value in MDC); MDC populated by the request filter, never by service code.
+- Levels: `error` (actionable), `warn` (degraded but handled), `info` (milestones — startup, shutdown, boundary), `debug` (verbose; off in prod).
+- Never log secrets, unbounded request bodies, or stack traces of expected business exceptions.
 
 ### Transactions
 
-- `@Transactional` on the service method, not on the controller or the repository.
-- Default propagation `REQUIRED`, default isolation `READ_COMMITTED`.
-- Read-only operations: `@Transactional(readOnly = true)` — enables JPA optimizations.
-- See `data-access` skill for transaction boundary details and N+1 prevention.
+- `@Transactional` on `@Service`. Not on controller. Not on repository.
+- Default propagation `REQUIRED`, default isolation `READ_COMMITTED`. Read paths: `@Transactional(readOnly = true)`.
+- Single transaction per use case. Cross-aggregate orchestration → saga / outbox / eventual consistency; never stretch a tx across remote calls. See `data-access`.
 
 ## Project structure
 
 ```
 src/main/kotlin/<root-package>/
 ├── <bounded-context>/
-│   ├── api/              # @RestController + request/response DTOs
-│   ├── application/      # @Service (use cases) + repository INTERFACES
-│   ├── domain/           # framework-free entities, value objects, domain services
-│   └── infrastructure/   # @Repository implementations, external HTTP clients, JPA entities
+│   ├── api/              # @RestController, Request/Response, advice
+│   ├── application/      # @Service, Command/Query/View, repository INTERFACES, mappers
+│   ├── domain/           # entities, value objects, domain services, sealed errors
+│   └── infrastructure/   # @Repository impls, HTTP clients, JPA @Entity, aspects, filters
 ├── common/               # cross-context utilities, error envelope, base config
 └── Application.kt        # @SpringBootApplication entry point
 ```
 
-One bounded context per package directly under root. Cross-context calls go through `application` services, never directly into another context's `domain` or `infrastructure`.
-
-Repository contract example (DIP in practice):
-```kotlin
-// application/UserRepository.kt — interface only, framework-free signatures
-interface UserRepository {
-    fun findById(id: UserId): User?
-    fun save(user: User): User
-}
-
-// infrastructure/persistence/JpaUserRepository.kt — Spring-aware implementation
-@Repository
-class JpaUserRepository(private val jpa: SpringDataUserRepository) : UserRepository { ... }
-```
+One bounded context per package directly under root. Cross-context calls go through the other context's `application/`.
 
 ## Build and tooling
 
-- Gradle Kotlin DSL (`build.gradle.kts`) — not Groovy.
-- Kotlin / Spring Boot / JDK pinned per the **Versions (pinned)** table at the top of this file. Toolchain config in `build.gradle.kts`.
-- Spring Boot `BOM` for transitive dependency versions.
+- Gradle Kotlin DSL (`build.gradle.kts`), not Groovy. Toolchain pinned in `build.gradle.kts`; JVM target = deployed JDK (no drift).
+- Spring Boot BOM for transitive versions.
 - ktlint or detekt configured; pre-commit hook runs both. Format errors fail CI.
-- JVM target matches the deployed JDK (no version drift between local and prod).
 
 ### Canonical commands (rescue trigger matches on these)
 
-- `./gradlew build` — compile + test + checks (full verification).
+- `./gradlew build` — compile + test + checks.
 - `./gradlew test` — tests only.
 - `./gradlew test --tests "<FQCN>"` — single class.
 - `./gradlew test --tests "<FQCN>.<method>"` — single method.
 - `./gradlew ktlintCheck` (or detekt equivalent) — lint only.
 
-The `error_signature` calculation in `adversarial-review-bridge` depends on these commands' error output format — do not deviate without updating the bridge skill.
+The `error_signature` in `adversarial-review-bridge` matches on these strings — do not deviate without updating the bridge skill.
 
 ## Performance smells (Roastmaster blocks on)
 
-- N+1 queries in JPA — see `data-access`.
+- N+1 queries in JPA (see `data-access`).
 - `@Transactional` on a controller method.
 - Blocking JDBC inside a coroutine without `Dispatchers.IO`.
 - Mutable list returned from a public service method.
 - `runBlocking` outside main/tests.
-- Reflection-based serialization in hot paths (use kotlinx.serialization or jackson-kotlin with sane defaults).
+- Reflection-based serialization in hot paths.
 
 ## When this skill conflicts with the AC
 
-If an AC explicitly demands a deviation (e.g., "use Java for this module due to legacy constraint"), document the deviation in the Design Doc and notify Roastmaster in advance. AC waivers are in-scope for stack overlays.
+If an AC explicitly demands a deviation, document it in the Design Doc and notify Roastmaster in advance. AC waivers are in-scope for stack overlays.
