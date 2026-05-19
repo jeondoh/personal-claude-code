@@ -66,7 +66,7 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
 
 3. **Component-first development**:
-   - Read Design Doc + UI specs
+   - Trust the ticket body — do not auto-read Design Doc / UI specs. Ambiguous requirement or design-system contradiction → `status: escalation_needed` → Technoking (no improvising). `related_design`/`related_prd`/`related_adrs` = audit metadata, not auto-read triggers.
    - Identify reusable components vs page-specific; build components first, compose into pages
    - Follow project's component model (Server/Client Components, SSR/SPA, islands, etc.)
 

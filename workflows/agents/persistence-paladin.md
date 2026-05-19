@@ -71,7 +71,7 @@ Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slu
 2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
 
 3. **TDD cycle (per AC)**:
-   - Read related Design Doc + PRD sections
+   - Trust the ticket body — do not auto-read Design/PRD. Ambiguous AC or codebase contradiction → `status: escalation_needed` → Technoking (no improvising). `related_design`/`related_prd`/`related_adrs` = audit metadata, not auto-read triggers.
    - Write failing test (unit or slice)
    - Implement minimum code to pass; refactor (preserve passing tests); repeat
    - Iteration: compile + scoped tests only. Full suite belongs in step 4.
