@@ -344,8 +344,44 @@ class OrderService(/* ... */) {
 ### Transactions
 
 - `@Transactional` on `@Service`. Not on controller. Not on repository.
-- Default propagation `REQUIRED`, default isolation `READ_COMMITTED`. Read paths: `@Transactional(readOnly = true)`.
+- Default propagation `REQUIRED`. Isolation = `Isolation.DEFAULT` — delegates to DB (Postgres → READ_COMMITTED, MySQL InnoDB → REPEATABLE_READ); set explicitly when the use case demands a specific level. Read paths: `@Transactional(readOnly = true)`.
 - Single transaction per use case. Cross-aggregate orchestration → saga / outbox / eventual consistency; never stretch a tx across remote calls. See `data-access`.
+
+### Async + Virtual Threads
+
+JDK 21+ Virtual Threads + Spring Boot 4.0 `spring.threads.virtual.enabled=true` is the I/O-blocking model. JDK 24 (JEP 491) removes `synchronized` pinning, so HikariCP / JDBC drivers / most `synchronized` blocks no longer pin the carrier.
+
+**VT is for I/O-bound work only.** Web requests, `@Async` over I/O, blocking JDBC → VT. **CPU-bound work never runs on VT** — use a platform-thread executor (`ForkJoinPool.commonPool()` / custom `ThreadPoolExecutor`) or Kotlin coroutines `Dispatchers.Default`. VT gives zero speedup for CPU work and only obscures profiling. Do not flip CPU executors to VT.
+
+**Use `@Async`** — fire-and-forget I/O whose result the response doesn't need and whose failure can be logged-and-swallowed:
+- Observability — audit logs, metrics, telemetry, raw request capture
+- Side-channel notifications — email, push, Slack, webhooks
+- Idempotent side-effects — search-index update, cache warm-up, retryable sync jobs
+
+**Do NOT use `@Async` when**:
+- Response correctness depends on the result
+- Work is part of a transactional invariant (order + payment must be atomic)
+- Ordering is critical — use queue + single consumer
+- Failure must be surfaced or trigger compensation — sync + explicit error handling
+- Work is CPU-bound — VT adds nothing; use platform-thread executor or Kotlin coroutines `Dispatchers.Default`
+
+**Virtual Thread setup**:
+- `spring.threads.virtual.enabled=true` — flips web request threads + `@Async` executor to VT in one switch
+- Bounded concurrency: `Executors.newVirtualThreadPerTaskExecutor()` wrapped in a `TaskExecutor` bean
+- Pinning audit (dev only): `-Djdk.tracePinnedThreads=full` — pinned stack at runtime; stress test only, never prod
+- Composes with Kotlin coroutines — `Dispatchers.IO` can back onto a VT executor; keep `Dispatchers.Default` for CPU-bound
+
+**`@Async` + `@Transactional`**:
+- `@Async` runs on a different thread — outer tx does **not** propagate. `@Transactional` on an async method opens a fresh tx by default. `REQUIRES_NEW` on the async method itself is dead (no outer tx to suspend) — it only matters for a **sync** child whose caller already holds a tx and needs the child to commit independently.
+- Fire-and-forget: prefer `void` return. `CompletableFuture` only when the caller actually waits.
+- `AsyncUncaughtExceptionHandler` bean for centralized failure logging — no swallow-only `try-catch` inside `@Async` bodies.
+
+**Anti-patterns** (Roastmaster):
+- `@Async` returning data the caller uses synchronously
+- `@Async` whose failure is silently tolerated without logging
+- Manual `Thread { }.start()` / `ExecutorService` outside `AsyncConfigurer` — fragmented pool topology, no centralized exception handling
+- `@Transactional(REQUIRES_NEW)` on a sync method with no outer tx — dead propagation; drop to `@Transactional` or move to `@Async`
+- Wrapper bean whose only job is `try-catch` for "best-effort" — usually `@Async` is the right answer
 
 ## Project structure
 
