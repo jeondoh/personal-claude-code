@@ -154,7 +154,7 @@ status: queued | in_progress | done
 assignee: persistence-paladin   # persona slug of original ticket's worker
 source_ticket: T-0042
 source_rescue: RESCUE-20260511T143000+0900
-branch: rescue/T-0042
+rescue_branch: rescue/T-0042
 priority: top
 created: 2026-05-11T17:30:00+09:00
 ---
@@ -247,6 +247,26 @@ dispatched → patch_received → validation_queued → resolved
 ```
 open → promoted (T-NNNN ticket created, BL moved to archive/)  OR  closed (won't fix)
 ```
+
+## Rescue validation cycle
+
+codex 가 만들어준 rescue 패치를 검증하는 `RV-NNNN` ticket (sub-case 4b) 처리 절차.
+
+**트리거**: Technoking 이 `/codex:rescue` 결과 받은 직후 `RV-NNNN-<slug>.md` 발행 (type: review, sub-case 4b, priority: top, header field `rescue_branch: rescue/T-{NNNN}` 포함). 자세한 디스패치 흐름은 `adversarial-review-bridge § Rescue dispatch pipeline`.
+
+**워커 처리 절차**:
+
+1. ticket header 에 `rescue_branch` 필드가 있으면 RV 검증 모드로 진입 (sub-case 4b).
+2. `git checkout rescue/T-{NNNN}` 으로 codex 패치 브랜치로 전환.
+3. 워커별 quality verification 실행 (build / test / typecheck / lint / a11y) — 페르소나 `§ Workflow` 의 표준 verification 단계와 동일.
+4. PASS → ticket `done`, `RESCUE-*` `status: resolved`, 머지 게이트 (Roastmaster 재리뷰) 진입.
+5. FAIL → inbox `kind: escalation_needed, reason: rescue_failed` 알림 + 사용자 에스컬레이션. **추가 코드 수정 시도 금지** — rescue 패치를 워커가 보수하지 않는다.
+
+**불변 규칙**:
+
+- RV-NNNN (sub-case 4b) 처리 중에는 코드 변경 금지 — codex 패치 그대로 검증만.
+- `rescue_branch` 필드가 없는 RV-NNNN 은 일반 PR review round (sub-case 4a) — 검증 사이클 아님.
+- Rescue 재시도 없음. FAIL 후 동일 ticket·동일 `error_signature` 로 재디스패치 X (`adversarial-review-bridge § Validation failure — never re-rescue`).
 
 ## File operations
 

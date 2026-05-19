@@ -83,17 +83,24 @@ Invariant across `/feat` and `/task`, small/medium/large:
 5. CI green (build, lint, type check, tests).
 6. PR within size limits (`git-flow`: 400 soft / 800 hard).
 
-### Worker escalation invariants
-
-Workers must never get stuck in a silent retry loop. Three layered guards apply to every ticket:
-
-1. **Per-failure `error_signature` check** — after every build/test invocation, the worker computes `error_signature` and compares it against `last_error_signature`. Match → `error_2x` escalation immediately, before any further code edit. The retry unit is **one build/test command execution**, not a logical "cycle." See persona `§ Workflow` quality-verification step.
-2. **Context-pressure preemptive escalation** — if the worker's own context usage exceeds 80% while a build/test failure is still unresolved, it must escalate with `reason: context_pressure`. Token pressure degrades the §Escalation-Conditions §1 evaluation; cut the loop early.
-3. **Background watchdog daemon** — `technoking-watchdog-daemon.sh` (launched by `/setup-team`) calls `ticket-watchdog.sh <pane> --dispatch-surrogate` against every worker pane every 40s. Stuck-pattern detection (`error_loop | rev_repeat | rev_idle`) auto-publishes a surrogate `error_2x` INBOX and touches the `.runtime/<pane>.complete` sentinel. The fswatch wake channel delivers the INBOX to Technoking as if the worker had self-escalated. **Technoking does not call the watchdog manually** — see `agents/technoking.md § Wake Channel`.
-
-These guards stack — (1) and (2) are the worker's responsibility; (3) is Technoking's safety net when (1) or (2) misfires.
-
 Roastmaster's authority is final. A BLOCKING from Roastmaster halts merge until resolved or escalated.
+
+## Worker escalation invariants
+
+Workers must never get stuck in a silent retry loop. **Four** triggers fire `kind: error_2x` immediately (no debug retry), plus a Technoking-side safety net. Persona bodies (`persistence-paladin`, `pixel-wizard`, `what-if-witch`) all evaluate the same four triggers — values consolidated here are canonical.
+
+| # | Trigger | Threshold | Detected by |
+|---|---|---|---|
+| 1 | `error_2x` — same `error_signature` repeats | After every build/test invocation; match against `last_error_signature` (formula in `adversarial-review-bridge § Error signature`) | Worker, before any further code edit |
+| 2 | `timeout` — elapsed since `started` | **> 20 min** with unresolved failure (all workers) | Worker |
+| 3 | `attempt_limit` — `attempt_count` | **≥ 3** with ongoing failure | Worker (every build/test = 1 attempt) |
+| 4 | `context_pressure` — worker's own context | **> 80%** while a failure is unresolved | Worker (pre-empt before judgment degrades) |
+
+The retry unit is **one build/test command execution**, not a logical "cycle." Any trigger → worker writes inbox `kind: error_2x` with `reason: build_loop|timeout|attempt_limit|context_pressure` and halts.
+
+**Safety net — background watchdog daemon**: `technoking-watchdog-daemon.sh` (launched by `/setup-team`) calls `ticket-watchdog.sh <pane> --dispatch-surrogate` against every worker pane every 40s. Stuck-pattern detection (`error_loop | rev_repeat | rev_idle`) auto-publishes a surrogate `error_2x` INBOX and touches the `.runtime/<pane>.complete` sentinel. The fswatch wake channel delivers the INBOX to Technoking as if the worker had self-escalated. **Technoking does not call the watchdog manually** — see `agents/technoking.md § Wake Channel`.
+
+Triggers 1–4 are the worker's responsibility; the watchdog is Technoking's safety net when they misfire.
 
 ## Stop policy details
 

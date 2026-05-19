@@ -180,10 +180,13 @@ fun aUser(
 
 Rescue trigger matches on these strings:
 
-- `./gradlew test` — full suite
+- `./gradlew test` — full suite (superset: every slice + ArchUnit + JaCoCo + contract)
 - `./gradlew test --tests "<FQCN>"` — single class
 - `./gradlew test --tests "<FQCN>.<method>"` — single method
-- `./gradlew build` — build verification
+- `./gradlew compileKotlin` — compile-only fast check
+- `./gradlew build` — build verification (compile + test + assemble)
+
+Iteration: `compileKotlin` + scoped `--tests`. Pre-push: `./gradlew test` once. No cascade — the full suite covers every subset.
 
 ## Coverage and CI
 

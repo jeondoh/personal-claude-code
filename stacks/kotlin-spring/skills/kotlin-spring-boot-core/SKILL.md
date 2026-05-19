@@ -59,20 +59,14 @@ api  →  application  →  domain  ←  infrastructure
 | `domain` | Entities, value objects, domain services, sealed errors. Framework-free. | nothing | everything else |
 | `infrastructure` | JPA repos, HTTP clients, file/queue, aspects, filters | `application` interfaces, `domain` | `api` |
 
-**Dependency Inversion (DIP).** Repository interfaces live in `application/`; JPA implementations live in `infrastructure/`. Spring DI wires them.
+**Dependency Inversion (DIP).** Repository interfaces in `application/` (framework-free); JPA implementations in `infrastructure/`; Spring DI wires them.
 
 ```kotlin
-// application/UserRepository.kt — framework-free
-interface UserRepository { fun findById(id: UserId): User?; fun save(user: User): User }
-
-// infrastructure/persistence/JpaUserRepository.kt
-@Repository
-class JpaUserRepository(private val jpa: SpringDataUserRepository) : UserRepository { /* ... */ }
+interface UserRepository { fun findById(id: UserId): User?; fun save(user: User): User }   // application/
+@Repository class JpaUserRepository(private val jpa: SpringDataUserRepository) : UserRepository { /* ... */ }   // infrastructure/
 ```
 
 ### BLOCKING — layer crimes
-
-Most "smelly code" is a layer doing another layer's job.
 
 - **`api/`** — calls `@Repository` directly; catches domain exceptions to shape responses (advice does it); builds aggregates by hand instead of via domain factory; reads/writes `MDC`; branches that encode business rules.
 - **`application/`** — computes business invariants (that's on the entity); holds mutable state; catches generic `Exception` "to be safe"; calls another bounded context's `domain/` or `infrastructure/` directly.
@@ -94,19 +88,14 @@ The `domain` layer owns business rules. `@Service` orchestrates; it does not com
 8. **Money** as `BigDecimal` with explicit scale and `RoundingMode`, wrapped in a `Money` value object (currency + amount together).
 
 ```kotlin
-// Anti-pattern: service computes status/lines invariants, mutates entity fields directly.
-// Correct: entity owns the rule; service orchestrates.
-
+// Entity owns the rule; service orchestrates.
 class Order private constructor(/* ... */) {
     fun confirm(now: Instant) {
-        check(status == PENDING)  { "order $id is not pending" }
+        check(status == PENDING) { "order $id is not pending" }
         check(lines.isNotEmpty()) { "order $id has no lines" }
-        status = CONFIRMED
-        confirmedAt = now
+        status = CONFIRMED; confirmedAt = now
     }
-    companion object {
-        fun create(/* ... */): Order { require(/* ... */); return Order(/* ... */) }
-    }
+    companion object { fun create(/* ... */): Order { require(/* ... */); return Order(/* ... */) } }
 }
 
 @Service
@@ -114,8 +103,7 @@ class OrderService(private val repo: OrderRepository, private val clock: Clock) 
     @Transactional
     fun confirm(id: OrderId) {
         val order = repo.findById(id) ?: throw OrderError.NotFound(id)
-        order.confirm(clock.instant())
-        repo.save(order)
+        order.confirm(clock.instant()); repo.save(order)
     }
 }
 ```
@@ -140,7 +128,7 @@ Five DTO families. Do not collapse them.
 6. **No `Map<String, Any>` or anonymous data classes** to dodge the rule — that's a Command with no name; name it.
 
 ```kotlin
-// api/UserController.kt
+// api/UserController.kt — Request lives here; mapping at controller body.
 data class RegisterUserRequest(
     @field:Email val email: String,
     @field:Size(min = 8) val password: String,
@@ -148,12 +136,10 @@ data class RegisterUserRequest(
 )
 
 @PostMapping("/users")
-fun register(@Valid @RequestBody req: RegisterUserRequest): UserResponse {
-    val cmd = RegisterUserCommand(Email(req.email), Password(req.password), req.displayName)
-    return UserResponse.from(userService.register(cmd))
-}
+fun register(@Valid @RequestBody req: RegisterUserRequest): UserResponse =
+    UserResponse.from(userService.register(RegisterUserCommand(Email(req.email), Password(req.password), req.displayName)))
 
-// application/RegisterUserCommand.kt
+// application/RegisterUserCommand.kt — typed Command, no JPA, no validation annotations.
 data class RegisterUserCommand(val email: Email, val password: Password, val displayName: String)
 ```
 
@@ -246,16 +232,13 @@ Anything that applies to "many methods regardless of business meaning" is declar
 5. **AOP advice contains no business rules.** Authorization aspect = "is this caller allowed at all"; business rule = "is this state transition legal" — the latter belongs on the entity.
 
 ```kotlin
-// infrastructure/audit/Audited.kt — annotation; @Aspect @Around impl elided (standard pattern)
+// infrastructure/audit/Audited.kt — annotation only (@Aspect @Around impl elided).
 @Target(AnnotationTarget.FUNCTION) @Retention(AnnotationRetention.RUNTIME)
 annotation class Audited(val action: String)
 
-// application/OrderService.kt — usage
-@Service
-class OrderService(/* ... */) {
-    @Audited("order.confirm")
-    @Transactional
-    fun confirm(id: OrderId) { /* ... */ }
+// application/OrderService.kt — declarative usage.
+@Service class OrderService(/* ... */) {
+    @Audited("order.confirm") @Transactional fun confirm(id: OrderId) { /* ... */ }
 }
 ```
 
@@ -346,42 +329,6 @@ class OrderService(/* ... */) {
 - `@Transactional` on `@Service`. Not on controller. Not on repository.
 - Default propagation `REQUIRED`. Isolation = `Isolation.DEFAULT` — delegates to DB (Postgres → READ_COMMITTED, MySQL InnoDB → REPEATABLE_READ); set explicitly when the use case demands a specific level. Read paths: `@Transactional(readOnly = true)`.
 - Single transaction per use case. Cross-aggregate orchestration → saga / outbox / eventual consistency; never stretch a tx across remote calls. See `data-access`.
-
-### Async + Virtual Threads
-
-JDK 21+ Virtual Threads + Spring Boot 4.0 `spring.threads.virtual.enabled=true` is the I/O-blocking model. JDK 24 (JEP 491) removes `synchronized` pinning, so HikariCP / JDBC drivers / most `synchronized` blocks no longer pin the carrier.
-
-**VT is for I/O-bound work only.** Web requests, `@Async` over I/O, blocking JDBC → VT. **CPU-bound work never runs on VT** — use a platform-thread executor (`ForkJoinPool.commonPool()` / custom `ThreadPoolExecutor`) or Kotlin coroutines `Dispatchers.Default`. VT gives zero speedup for CPU work and only obscures profiling. Do not flip CPU executors to VT.
-
-**Use `@Async`** — fire-and-forget I/O whose result the response doesn't need and whose failure can be logged-and-swallowed:
-- Observability — audit logs, metrics, telemetry, raw request capture
-- Side-channel notifications — email, push, Slack, webhooks
-- Idempotent side-effects — search-index update, cache warm-up, retryable sync jobs
-
-**Do NOT use `@Async` when**:
-- Response correctness depends on the result
-- Work is part of a transactional invariant (order + payment must be atomic)
-- Ordering is critical — use queue + single consumer
-- Failure must be surfaced or trigger compensation — sync + explicit error handling
-- Work is CPU-bound — VT adds nothing; use platform-thread executor or Kotlin coroutines `Dispatchers.Default`
-
-**Virtual Thread setup**:
-- `spring.threads.virtual.enabled=true` — flips web request threads + `@Async` executor to VT in one switch
-- Bounded concurrency: `Executors.newVirtualThreadPerTaskExecutor()` wrapped in a `TaskExecutor` bean
-- Pinning audit (dev only): `-Djdk.tracePinnedThreads=full` — pinned stack at runtime; stress test only, never prod
-- Composes with Kotlin coroutines — `Dispatchers.IO` can back onto a VT executor; keep `Dispatchers.Default` for CPU-bound
-
-**`@Async` + `@Transactional`**:
-- `@Async` runs on a different thread — outer tx does **not** propagate. `@Transactional` on an async method opens a fresh tx by default. `REQUIRES_NEW` on the async method itself is dead (no outer tx to suspend) — it only matters for a **sync** child whose caller already holds a tx and needs the child to commit independently.
-- Fire-and-forget: prefer `void` return. `CompletableFuture` only when the caller actually waits.
-- `AsyncUncaughtExceptionHandler` bean for centralized failure logging — no swallow-only `try-catch` inside `@Async` bodies.
-
-**Anti-patterns** (Roastmaster):
-- `@Async` returning data the caller uses synchronously
-- `@Async` whose failure is silently tolerated without logging
-- Manual `Thread { }.start()` / `ExecutorService` outside `AsyncConfigurer` — fragmented pool topology, no centralized exception handling
-- `@Transactional(REQUIRES_NEW)` on a sync method with no outer tx — dead propagation; drop to `@Transactional` or move to `@Async`
-- Wrapper bean whose only job is `try-catch` for "best-effort" — usually `@Async` is the right answer
 
 ## Project structure
 

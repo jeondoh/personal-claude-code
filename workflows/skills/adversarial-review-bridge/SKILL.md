@@ -70,7 +70,18 @@ Inbox messages with `kind: escalation_needed` and one of these reasons **do not*
 - `untestable_ac`
 - `codex_unavailable`
 
-## `error_signature` calculation
+## Findings classification
+
+Roastmaster 가 codex review 결과를 4단계로 분류한다. Workflow gates depend on these labels — keep them consistent.
+
+- **BLOCKING** — security flaw, correctness bug, contract violation, data corruption risk. Merge halted until resolved.
+- **SHOULD** — design violation, maintainability concern, performance smell. Strongly recommended; may downgrade to COMMENT when a legitimate trade-off exists (state reason in report).
+- **NIT** — style, naming, micro-optimization. Never blocks merge.
+- **OUT-OF-SCOPE** — outside this PR's scope. Split off into `BL-NNNN` backlog item, not addressed inline.
+
+Verdict mapping: any BLOCKING → verdict `BLOCKING`. SHOULDs and NITs alone → `COMMENT`. No findings → `APPROVE`.
+
+## Error signature
 
 ```
 error_signature = first 8 hex chars of SHA-1(<error_class>:<failing_component>)
@@ -89,30 +100,18 @@ If the failing component cannot be determined, use `<error_class>:unknown` — t
 
 The worker computes the signature after the second occurrence and includes it in the **single** `kind: error_2x` inbox message. Technoking triggers rescue immediately on receiving any `kind: error_2x` message — no second message required.
 
-## Rescue dispatch — the 6-step pipeline
+## Rescue dispatch pipeline
 
-```
-0. Pre-flight                  /codex:status (halt if not ready)
-1. Technoking dispatches       /codex:rescue --background, with the failing branch
-                               name and a prompt body that includes the
-                               error_signature for traceability. Codex plugin's
-                               exact flags are owned by codex-plugin-cc; we pass
-                               signature via prompt content, not as a flag.
-                               → returns codex_job_id
-2. Technoking writes record    .claude-team/rescues/RESCUE-<ts>.md (status: dispatched)
-3. Continue other work         Technoking does not block — picks up next ticket
-4. Patch arrives               Codex pushes a patch branch. If codex names it
-                               differently, Technoking renames to rescue/T-NNNN
-                               before spawning the validation ticket.
-                               Detected on next /codex:status poll.
-5. Spawn validation ticket     RV-NNNN with priority: top, assignee = original
-                               ticket's worker. Worker merges rescue branch
-                               locally, re-runs failing tests.
-6. Re-review                   Roastmaster re-reviews on rescue branch (round resets).
-                               APPROVE → merge. BLOCKING → see "validation failure".
-```
+`error_2x` / `pattern_stuck` INBOX 수신 시 Technoking 이 실행하는 6단계. Pre-flight `/codex:status` 통과 가정 (실패 시 halt — see `Pre-flight`).
 
-Detailed schemas in `ticket-protocol` — `rescue` and `review` ticket types.
+0. **De-dup check** — same `source_ticket` + same `error_signature` already has a `.claude-team/rescues/RESCUE-*.md`? → escalate to user, no new dispatch. At most one rescue per ticket per `error_signature`.
+1. **알림 파싱** — `INBOX-<ts>-<pane>.json` 에서 `kind`, `error_signature`, `rev_count`, `source_ticket` 추출.
+2. **추적 파일 생성** — `.claude-team/rescues/RESCUE-<ts>-<ticket>.md` 작성 (`source_ticket`, `error_signature`, `dispatched_at`, `status: dispatched`).
+3. **codex 호출** — `/codex:rescue --background` 비차단 디스패치. `error_signature` 는 prompt body 에 포함 (codex-plugin-cc 의 flag 는 가정하지 않음). → returns `codex_job_id`. Technoking 은 즉시 다음 작업으로 복귀.
+4. **검증 ticket 발행** — codex 가 패치 브랜치를 push 하면 (감지: 다음 `/codex:status` poll), `RV-NNNN-<slug>.md` 생성. Schema: `type: review`, sub-case 4b, `priority: top`, `assignee` = 원 ticket worker, header field `rescue_branch: rescue/T-{NNNN}`. 브랜치명이 다르면 Technoking 이 `rescue/T-{NNNN}` 으로 rename 후 발행.
+5. **결과 처리** — RV ticket 검증 PASS → 머지 게이트 (Roastmaster 재리뷰). FAIL → `RESCUE-*` `status: failed`, 사용자 에스컬레이션. Rescue 재시도 없음 (see `Validation failure — never re-rescue`).
+
+Detailed schemas in `ticket-protocol § Ticket type schemas` (`rescue`, `review § 4b`) and `Rescue validation cycle`.
 
 ## codex-plugin-cc 계약 가정 (rescue 파이프라인 의존)
 
