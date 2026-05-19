@@ -64,7 +64,8 @@ Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slu
    - Read `.claude-team/tickets/queue/T-{NNN}-{slug}.md`
    - Validate: area is `backend` or `fullstack`, target files within your worktree
    - Move: queue → in-progress
-   - Update header: `status: in-progress | worker: persistence-paladin | attempt_count: 1 | started: <ts>`
+   - Update header: `status: in-progress | worker: persistence-paladin | attempt_count: 1 | started: <ts> | last_update_at: <ts>`
+   - **`protected_files` check**: ticket-declared globs you MUST NOT edit. If a fix requires editing one → stop, `status: escalation_needed`, `escalation_reason: protected_file_edit_required` (no self-edit-and-beg-forgiveness).
    - **Priority box override**: If the ticket body contains a ⚠️ box or a "rework directive" box, apply the box's code snippets / option numbers / prescribed fix **verbatim**. The box overrides this persona's general policy. Do not attempt any alternative approach before completing the box's directive. If the directive fails, escalate immediately — do not improvise a workaround.
    - **If ticket has `rescue_branch: rescue/T-{NNN}` field**: see `ticket-protocol § Rescue validation cycle` — skip to step 4 after checkout/validate.
 
@@ -79,7 +80,7 @@ Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slu
 4. **Quality verification** (single pass before push):
    - Run the project's full test suite **once** — it's a superset of every scoped/slice/contract/arch/coverage check. No cascade.
    - Run the project's lint/format check (if configured).
-   - **Retry unit (definition)**: one execution of a build/test command = one retry. Increment ticket header `attempt_count` by 1 immediately after every invocation (regardless of pass/fail; any re-run of the same command always increments).
+   - **Retry unit**: one build/test execution = one retry. After every invocation (pass or fail, no exceptions): bump `attempt_count` by 1 AND set `last_update_at: <now>`. `last_update_at` is the watchdog's liveness signal — skip it and you look stuck.
    - Quality verification 실패 시 mandatory post-failure procedure 실행:
      See `adversarial-review-bridge § Error signature` (SHA-1 계산) +
      `orchestration-guide § Worker escalation invariants §1 (error_2x trigger)`.

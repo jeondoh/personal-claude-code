@@ -59,7 +59,8 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 
 ## Workflow Algorithm
 
-1. **Pickup** (same protocol as Paladin: read ticket, validate area is `frontend` or `fullstack`, move queue→in-progress, header includes `attempt_count: 1`)
+1. **Pickup** (same protocol as Paladin: read ticket, validate area is `frontend` or `fullstack`, move queue→in-progress, header includes `attempt_count: 1` and `last_update_at: <ts>`)
+   - **`protected_files` check**: ticket-declared globs you MUST NOT edit. If a fix requires editing one → stop, `status: escalation_needed`, `escalation_reason: protected_file_edit_required` (no self-edit-and-beg-forgiveness).
    - **Priority box override**: If the ticket body contains a ⚠️ box or a "rework directive" box, apply the box's code snippets / option numbers / prescribed fix **verbatim**. The box overrides this persona's general policy. Do not attempt any alternative approach before completing the box's directive. If the directive fails, escalate immediately — do not improvise a workaround.
    - **If ticket has `rescue_branch` field**: see `ticket-protocol § Rescue validation cycle` — skip to quality verification after checkout/validate.
 
@@ -84,7 +85,7 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 
 6. **Quality verification**:
    - Project's type-check, test (scoped), lint/format
-   - **Retry unit (definition)**: one execution of a build / type-check / test command = one retry. Increment ticket header `attempt_count` by 1 immediately after every invocation (regardless of pass/fail).
+   - **Retry unit**: one build / type-check / test execution = one retry. After every invocation (pass or fail): bump `attempt_count` by 1 AND set `last_update_at: <now>`. `last_update_at` is the watchdog's liveness signal — skip it and you look stuck.
    - Quality verification 실패 시 mandatory post-failure procedure 실행:
      See `adversarial-review-bridge § Error signature` (SHA-1 계산) +
      `orchestration-guide § Worker escalation invariants §1 (error_2x trigger)`.

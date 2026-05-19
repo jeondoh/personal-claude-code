@@ -76,13 +76,19 @@ files_in_scope:
 depends_on: [T-0041]                              # other tickets that must merge first
 attempt_count: 1                                  # incremented on every build/test invocation (worker)
 last_error_signature: a3f8b2e1                    # 8-char SHA-1 of <exception_class>:<failing_bean_or_test>; updated by worker after every failure
+last_update_at: 2026-05-11T14:35:00+09:00         # bumped on every build/test invocation or state change (watchdog liveness signal)
+protected_files:                                   # worker MUST NOT edit; watchdog fires verification on diff hit
+  - src/test/resources/contract/**
+  - **/application*.yaml
 created: 2026-05-11T14:30:00+09:00
 updated: 2026-05-11T14:30:00+09:00
 author: technoking
 ---
 ```
 
-`attempt_count` and `last_error_signature` are **worker-managed**: Technoking writes neither at dispatch time. The worker initializes `attempt_count: 1` on claim and overwrites `last_error_signature` after every build/test failure (see `agents/persistence-paladin.md § Workflow step 4` and `agents/pixel-wizard.md § Workflow step 6`). If the freshly computed signature matches the existing field, the worker branches to its `error_2x` escalation path immediately.
+`attempt_count`, `last_error_signature`, `last_update_at` are **worker-managed** (Technoking writes none at dispatch). On claim: `attempt_count: 1` + `last_update_at: <now>`. After every build/test failure: overwrite `last_error_signature` + bump `last_update_at` (see `agents/persistence-paladin.md § Workflow step 4`, `agents/pixel-wizard.md § Workflow step 6`). Computed signature == existing field → branch to `error_2x` path immediately.
+
+`protected_files` is **Technoking-set at dispatch** for assets that must remain pristine (contract snapshots, production yaml, lockfiles, vendored code, third-party fixtures). Worker MUST NOT edit them; fix-required → `status: escalation_needed` (no self-edit). Watchdog also diffs the worktree and fires verification on any protected-file hit. Globs are worktree-root relative.
 
 ### 2. Review report (`type: review-report`)
 
@@ -186,6 +192,9 @@ created: 2026-05-11T14:35:00+09:00
 - `pattern_stuck` — worker-review → Technoking same BLOCKING repeated; triggers auto-rescue (payload: `blocking_signature`, `rev_count`).
 - `fix_pushed` — worker → Technoking BLOCKING fix pushed (payload: `branch`, `last_sha`); Technoking issues round+1 `RV-NNNN`.
 - `needs_reblock` — worker → Technoking COMMENT finding escalated to BLOCKING; reason attached.
+- `pattern_question` — watchdog → Technoking ambiguous loop/stagnation; **does not auto-kill the worker** — routes to user-decision via Technoking (payload: `pane`, `ticket`, `signals`, `verifier_verdict: ambiguous`, `recommended_action: kill_and_rescue|wait_one_cycle|user_decide`, `evidence_dump_path: .claude-team/.runtime/verifier-<ts>.log`). Technoking presents signals + recommendation via `AskUserQuestion`; never act on a single signal alone.
+- `error_2x` — worker self-escalation OR watchdog surrogate after **verifier confirms** confirmed_loop pattern (payload: `error_signature`, `attempt_count`, `failing_test_or_file`, `source: worker|watchdog-surrogate`, optional `verifier_verdict: confirmed_loop`). Triggers `/codex:rescue` per `adversarial-review-bridge §Rescue dispatch pipeline`.
+- `escalation_needed` — worker self-escalation OR watchdog surrogate after **verifier confirms** stagnation/timeout (payload: `reason`, optional `verifier_verdict: stagnation`). Technoking handles per `agents/technoking.md §Escalation Coordination`.
 
 ### 6. Backlog (`type: backlog`)
 
