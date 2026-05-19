@@ -101,7 +101,6 @@ Worker writes to `.claude-team/inbox/INBOX-<ts>-<pane-name>.json`:
 - `kind: escalation_needed` — blocking issue requiring user or Galaxy Brain (see `ticket-protocol` for `reason` enum)
 - `kind: completion` — branch pushed, ready for PR
 - `kind: error_2x` — same `error_signature` failed twice → triggers auto-rescue
-- `kind: pattern_question` — clarification request to Technoking (non-blocking; worker continues on what it can)
 - `kind: review_complete` — worker-review → Technoking (verdict + report path)
 - `kind: pattern_stuck` — worker-review → Technoking (auto-rescue trigger)
 - `kind: fix_pushed` — worker → Technoking (BLOCKING fix push complete)
@@ -130,7 +129,7 @@ The file-only rule extends to Technoking. Two background daemons (launched by `/
 | Daemon | Mechanism | Output |
 |---|---|---|
 | `technoking-watcher.sh` | `fswatch .claude-team/inbox/` | new `INBOX-*.json` paths → `.runtime/wake.log` |
-| `technoking-watchdog-daemon.sh` | every 40s: `ticket-watchdog.sh <pane> --dispatch-surrogate` | stuck-pattern detection writes surrogate `INBOX-*.json` (same wake channel) |
+| `technoking-watchdog-daemon.sh` | every 40s: `ticket-watchdog.sh <pane> --dispatch-surrogate` | signal collection + verification → surrogate `INBOX-*.json` (`error_2x` / `escalation_needed` / `pattern_question`, same wake channel); sentinel touched only for confirmed verdicts |
 
 Technoking subscribes via `Monitor(command: 'tail -F -n 0 .claude-team/.runtime/wake.log', persistent: true)`. Each notification = one inbox event. See `agents/technoking.md § Wake Channel`.
 

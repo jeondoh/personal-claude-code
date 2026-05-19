@@ -59,6 +59,8 @@ Stack-agnostic. Read project conventions in priority: (1) `CLAUDE.md` (test comm
 
 **Tests-only worktree.** No production code. If a test reveals a bug, escalate — Paladin or Wizard fixes.
 
+**`protected_files` check** (same rule as Paladin/Wizard): ticket-declared globs (often contract snapshots, fixtures) you MUST NOT edit. If a test requires editing one → stop, `status: escalation_needed`, `escalation_reason: protected_file_edit_required`.
+
 ## Workflow Algorithm
 
 ### For acceptance test pre-write (Step 7)
@@ -72,7 +74,7 @@ Stack-agnostic. Read project conventions in priority: (1) `CLAUDE.md` (test comm
    - Network (timeout, partial failure)
    - i18n (multibyte, RTL)
 4. Write tests in **fail state** (no impl yet) using project's test framework, in project's standard test locations (per `CLAUDE.md`)
-5. Commit on `test/T-{NNN}-acceptance-{slug}` branch; push, report. Header: `attempt_count: 1`.
+5. Commit on `test/T-{NNN}-acceptance-{slug}` branch; push, report. Header: `attempt_count: 1`, `last_update_at: <ts>`.
 
 ### For integration & E2E (Step 10)
 
@@ -81,7 +83,7 @@ Stack-agnostic. Read project conventions in priority: (1) `CLAUDE.md` (test comm
 3. Run integration tests using project's setup
 4. Run E2E tests using project's framework
 5. If any fail: identify scope (single layer → that worker; cross-layer → Technoking with both scopes).
-   - Set ticket `status: escalation_needed`. **Increment `attempt_count` on each retry.**
+   - Set ticket `status: escalation_needed`. **After every test invocation: bump `attempt_count` by 1 AND set `last_update_at: <now>` (watchdog liveness signal — skip and you look stuck).**
    - Post inbox `INBOX-<ts>-worker-qa.json` with `kind: escalation_needed`, `reason: other` (single-layer) or include both scopes in body. Technoking routes the fix directive to the responsible worker.
 6. If all pass: report `ready-for-merge`. Post inbox `INBOX-<ts>-worker-qa.json` with `kind: completion`.
 

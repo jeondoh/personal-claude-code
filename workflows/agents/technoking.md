@@ -142,7 +142,7 @@ After dispatching workers, Technoking does **not** poll. Two background daemons 
 | Daemon | Role | PID file |
 |---|---|---|
 | `technoking-watcher.sh` | `fswatch` on `.claude-team/inbox/` → new `INBOX-*.json` paths appended to `.runtime/wake.log` | `.runtime/watcher.pid` |
-| `technoking-watchdog-daemon.sh` | every 40s: `ticket-watchdog.sh <pane> --dispatch-surrogate` for each worker pane → stuck-pattern detection writes surrogate `INBOX-*.json` (same wake channel) | `.runtime/watchdog.pid` |
+| `technoking-watchdog-daemon.sh` | every 40s: `ticket-watchdog.sh <pane> --dispatch-surrogate` for each worker pane → signal collection + verification phase → classifies as `confirmed_loop` / `stagnation` / `protected_breach` / `ambiguous` → writes the kind-specific surrogate `INBOX-*.json` (same wake channel) | `.runtime/watchdog.pid` |
 
 Both failure modes (normal worker completion + silent stuck worker) converge on the **single `INBOX-*.json` event** picked up by fswatch.
 
@@ -167,7 +167,8 @@ Monitor(
    - `escalation_needed` → §Escalation Coordination
    - `error_2x` / `pattern_stuck` → §Rescue Procedure
    - `needs_reblock` → re-issue BLOCKING `RV-NNNN`
-   - `progress` / `pattern_question` → informational, no flow change
+   - `progress` → informational, no flow change
+   - `pattern_question` → watchdog ambiguous-signal escalation; present evidence (`signals`, `evidence_dump_path`) + `recommended_action` to user via `AskUserQuestion`; act per user choice (kill_and_rescue → Rescue Procedure; wait_one_cycle → no action; user_decide → bespoke). Worker is **not auto-killed** for this kind.
 3. Mark file `processed: true` or delete per `ticket-protocol § inbox lifecycle`.
 4. Resume lifecycle (next dispatch / next step). Monitor stays armed.
 
@@ -180,15 +181,27 @@ Monitor(
 
 Re-arm Monitor on next dispatch (each autonomous phase = fresh Monitor call).
 
-### Watchdog detection (now fully automated)
+### Watchdog detection (v2 — verification-phase classifier)
 
-The 40s daemon runs `ticket-watchdog.sh <pane> --dispatch-surrogate` for `worker-be | worker-fe | worker-qa | worker-review`. Probe returns one of: `none`, `self_escalated` (skip), `error_loop`, `rev_repeat`, `rev_idle`. The latter three trigger surrogate `INBOX-<ts>-<pane>.json` (`kind: error_2x`, `from: technoking-watchdog`) + `.runtime/<pane>.complete` sentinel — Technoking receives the wake exactly as if the worker had self-escalated.
+The 40s daemon runs `ticket-watchdog.sh <pane> --dispatch-surrogate` for `worker-be | worker-fe | worker-qa | worker-review`. The probe collects six signals (`error_loop`, `rev_repeat`, `rev_idle`, `last_update_stale`, `protected_breach`, `worktree_stagnation`), then verifies and classifies. Priority order: `protected_breach` > `confirmed_loop` > `stagnation` > `ambiguous` > `normal_thinking`.
 
-**Technoking notifies on receipt** (no [Stop], no question):
+| Verdict | Surrogate INBOX kind | Sentinel? | Technoking action |
+|---|---|---|---|
+| `protected_breach` | `escalation_needed` (reason: `protected_file_edit:<glob>`) | yes | §Escalation Coordination |
+| `confirmed_loop` | `error_2x` (`verifier_verdict: confirmed_loop`) | yes | §Rescue Procedure |
+| `stagnation` | `escalation_needed` (reason: `stagnation:idle=…s,stale=…s,...`) | yes | §Escalation Coordination |
+| `ambiguous` | `pattern_question` (`recommended_action: kill_and_rescue\|wait_one_cycle\|user_decide`) | **no** — worker stays alive | `AskUserQuestion` with `evidence_dump_path` attached |
+| `normal_thinking` / `self_escalated` / `idle_no_ticket` | — (skip) | no | none |
+
+The sentinel touch is the kill-switch: `confirmed_loop` / `stagnation` / `protected_breach` reset the worker pane automatically; `ambiguous` does not — Technoking must wait for the user's decision before kill_and_rescue.
+
+**Technoking notification (confirmed cases — `confirmed_loop` / `stagnation` / `protected_breach`)**:
 ```
-<pane> stuck 패턴 감지 (surrogate INBOX) → /codex:rescue 위임. 다른 티켓 계속 진행.
+<pane> 검증 완료 (<verdict>) — surrogate INBOX 수신, <kind> 라우팅 중. 다른 티켓 계속 진행.
 — Technoking
 ```
+
+**Technoking handling (ambiguous case — `pattern_question`)**: present `signals` + `recommended_action` + tail of `evidence_dump_path` via `AskUserQuestion`. Do not act on a single signal alone; do not pre-emptively kill the worker.
 
 **De-dup** (rescue procedure step 0): surrogate INBOX `error_signature` matching a prior `RESCUE-*` for the same `source_ticket` → escalates to user instead of new rescue dispatch.
 

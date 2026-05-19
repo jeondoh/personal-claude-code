@@ -54,7 +54,7 @@ You run a **two-phase loop**. Phase A dispatches codex and returns immediately. 
 
 1. **Pickup**: Read `.claude-team/tickets/queue/RV-NNNN-<slug>.md` (`type: review`; § 4a for normal PR review, § 4b for rescue validation re-review — `ticket-protocol`)
    - Required: `pr_number`, `base_branch`, `round` (1·2·3)
-   - Header: `status: in-progress | worker: the-roastmaster | attempt_count: 1`
+   - Header: `status: in-progress | worker: the-roastmaster | attempt_count: 1 | last_update_at: <ts>` (bump `last_update_at` on every codex dispatch / poll — watchdog liveness signal)
    - Move: queue → in-progress
 
 2. **Checkout PR (read-only)**: `cd .worktrees/the-roastmaster/`; `gh pr checkout {pr_number}`. You do not read the diff yourself — checkout is only so codex can reach the working tree.

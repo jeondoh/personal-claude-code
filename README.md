@@ -206,7 +206,8 @@ stacks/<name>/
 
 - **codex 는 필수 의존성** — `/codex:status` 가 ready 가 아니면 어떤 ticket 도 진행 안 됨. 약화된 모드 없음.
 - **품질 게이트는 모든 변경에 동일하게 적용** — 작은 `/task` 도 codex 리뷰 + 자동 rescue 게이트 통과 의무.
-- **자동 rescue** — 같은 에러가 2 번 반복되거나 같은 BLOCKING 이 2 라운드 이어지면 사용자 승인 없이 codex 에 위임해 패치를 받아온다.
+- **자동 rescue** — 같은 에러가 2 번 반복되거나 같은 BLOCKING 이 2 라운드 이어지면 사용자 승인 없이 codex 에 위임해 패치를 받아온다. 워커 자체 감지를 놓쳤을 때를 위해 백그라운드 watchdog 이 40 초마다 6 가지 신호 (반복 에러·동일 줄·idle·last_update_at·worktree mtime·보호 파일 변경) 를 모아 검증한다 — **확정** 케이스만 자동 rescue / 에스컬레이션이 발동하고, **모호한** 케이스는 워커를 죽이지 않고 evidence 와 함께 사용자에게 결정을 묻는다.
+- **보호 파일 (`protected_files`)** — Technoking 이 ticket 발행 시 "건드리면 안 되는" 글로브 목록 (계약 스냅샷·운영 yaml·lockfile·벤더 코드·서드파티 fixture 등) 을 지정할 수 있다. 워커는 그 파일들을 직접 편집할 수 없으며, 수정이 필요하면 곧장 에스컬레이션. watchdog 도 worktree diff 를 살펴 위반을 잡아낸다.
 - **승인 절차 (Stop)** — `small` = 0 회 (자율 진행) / `medium` = 1 회 (PRD+설계 통합 확인) / `large` = 3 회 (PRD · 설계 · 작업 batch 각각). 머지 직전 추가 확인은 없음.
 - **언어 정책** — 사용자가 직접 읽는 문서(PRD · 설계 · ADR · commit 본문 · PR 본문 · 리뷰 보고서) 는 **한국어**. 페르소나 정의 · 스킬 · 코드 · conventional commit prefix · YAML key 는 **영어**.
 
