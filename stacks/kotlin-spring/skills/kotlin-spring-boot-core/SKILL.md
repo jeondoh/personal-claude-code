@@ -159,37 +159,67 @@ data class RegisterUserCommand(val email: Email, val password: Password, val dis
 
 ## Exception handling
 
-`try-catch` is a last resort. Most code lets exceptions propagate to `@RestControllerAdvice`.
+`try-catch` is forbidden in business logic. Exceptions propagate to `@RestControllerAdvice` — the single response-mapping site.
 
-1. **No `try-catch` in `api/` or `application/` for control flow.** Validation → `require` / `check` / `requireNotNull` / `@Valid`. Business-rule violation → throw a sealed domain exception and propagate.
-2. **`try-catch` allowed only at three sites:**
-   - `infrastructure/` adapter translating a library exception → domain exception. **Must rethrow.** Log-and-swallow is BLOCKING.
-   - `@RestControllerAdvice` mapping domain exceptions → error envelope.
-   - Resource cleanup — prefer `use { }` / `try-finally` over `try-catch`.
-3. **No generic catch.** `catch (e: Exception)` / `catch (e: Throwable)` anywhere is BLOCKING. Catch the narrowest type.
-4. **No swallow.** `catch { }`, `catch { log.warn(...) }` with no rethrow, `catch { return null }` without semantic justification.
-5. **Model business errors as `sealed class`.** One sealed hierarchy per bounded context, extending `RuntimeException`. Advice exhausts the hierarchy with `when` — compiler enforces completeness. Plain `RuntimeException("...")` for business errors is BLOCKING.
-6. **`runCatching { }`** allowed only when (a) immediately mapped to a domain `Result`, or (b) bridging non-Kotlin code with checked exceptions. Wrapping a whole service body is BLOCKING.
-7. **Context on rethrow.** Translating in `infrastructure/`: attach the failed operation — `throw PaymentGatewayUnavailable("authorize chargeId=$id", cause)`. Bare `throw DomainError(cause)` is BLOCKING.
+1. **No `try-catch` in `api/`, `application/`, `infrastructure/`** for control flow or wrap-and-rethrow. Validation → `require` / `check` / `requireNotNull` / `@Valid`. Business-rule violation → throw a sealed domain exception. Library exceptions (`DataAccessException`, `HttpClientErrorException`, etc.) propagate unwrapped — the advice has explicit handlers; `repository.save(...)` does **not** `try-catch` to translate.
+2. **`try-catch` allowed only at four sites:**
+   - `@RestControllerAdvice` mapping domain + library exceptions → error envelope.
+   - **Filter chain** (Spring Security / servlet filters) — advice does not reach it; catch the narrowest framework exception inline (e.g. `JwtException`).
+   - **Utility / helper functions** (parsers, mappers) encapsulating fallback-value semantics. The helper is the boundary — **never inside service / controller bodies**.
+   - Resource cleanup — prefer `use { }` / `try-finally`.
+3. **No generic catch.** `catch (e: Exception)` / `catch (e: Throwable)` is BLOCKING. Catch the narrowest type.
+4. **No swallow.** `catch { }`, `catch { log.warn(...) }` without rethrow, `catch { return null }` without semantic justification.
+5. **Business errors = `sealed class` rooted at a common `DomainException`.**
+   - `common/error/DomainException.kt` → `sealed class DomainException(message, cause) : RuntimeException`.
+   - Per bounded context: `sealed class XxxError(message, cause) : DomainException(message, cause)` (e.g. `AuthError`, `OrderError`).
+   - Concrete cases: `class CaseName(...) : XxxError("...")`.
+   - Plain `RuntimeException("...")` for business errors is BLOCKING.
+6. **Single domain handler in advice.** `@ExceptionHandler(DomainException::class)` dispatches by exhaustive `when (e)` to per-context handlers. New bounded context = new `when` branch, no new `@ExceptionHandler`. Status code mapped here, not in service.
+7. **`runCatching { }`** allowed only when (a) immediately mapped to a domain `Result`, (b) bridging non-Kotlin code with checked exceptions, or (c) inside utility helpers for fallback. Wrapping a whole service body is BLOCKING.
 8. **No `@Throws` chains** across layers to simulate checked exceptions. KDoc the contract on public service methods when needed.
 
 ```kotlin
-// domain/OrderErrors.kt
-sealed class OrderError(message: String, cause: Throwable? = null) : RuntimeException(message, cause) {
+// common/error/DomainException.kt — root of business errors
+sealed class DomainException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+
+// order/domain/OrderError.kt
+sealed class OrderError(message: String, cause: Throwable? = null) : DomainException(message, cause) {
     class NotFound(val id: OrderId)         : OrderError("order $id not found")
     class AlreadyConfirmed(val id: OrderId) : OrderError("order $id already confirmed")
     class EmptyOrder(val id: OrderId)       : OrderError("order $id has no lines")
 }
 
-// api/GlobalExceptionHandler.kt
+// auth/domain/AuthError.kt
+sealed class AuthError(message: String, cause: Throwable? = null) : DomainException(message, cause) {
+    class EmailAlreadyExists(val email: String) : AuthError("email already exists: $email")
+    class InvalidCredentials                    : AuthError("invalid credentials")
+}
+
+// api/GlobalExceptionHandler.kt — single domain handler dispatched by when
 @RestControllerAdvice
 class GlobalExceptionHandler {
-    @ExceptionHandler(OrderError::class)
-    fun handle(e: OrderError): ResponseEntity<ErrorEnvelope> = when (e) {
+    @ExceptionHandler(DomainException::class)
+    fun handleDomain(e: DomainException): ResponseEntity<ErrorEnvelope> = when (e) {
+        is OrderError -> handleOrder(e)
+        is AuthError  -> handleAuth(e)
+        // new sealed XxxError without a branch here = compile error
+    }
+
+    private fun handleOrder(e: OrderError) = when (e) {
         is OrderError.NotFound         -> status(404).body(ErrorEnvelope("order.not_found", e.message!!))
         is OrderError.AlreadyConfirmed -> status(409).body(ErrorEnvelope("order.already_confirmed", e.message!!))
         is OrderError.EmptyOrder       -> status(422).body(ErrorEnvelope("order.empty", e.message!!))
     }
+
+    private fun handleAuth(e: AuthError) = when (e) {
+        is AuthError.EmailAlreadyExists -> status(409).body(ErrorEnvelope("auth.email_taken", e.message!!))
+        is AuthError.InvalidCredentials -> status(401).body(ErrorEnvelope("auth.invalid_credentials", e.message!!))
+    }
+
+    // Library exception → translated in advice, not in service wrap
+    @ExceptionHandler(DataAccessException::class)
+    fun handleDb(e: DataAccessException): ResponseEntity<ErrorEnvelope> =
+        status(500).body(ErrorEnvelope("infrastructure.db_failure", "database error"))
 }
 ```
 
