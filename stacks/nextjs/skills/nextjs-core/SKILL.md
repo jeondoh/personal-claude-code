@@ -79,6 +79,23 @@ types/                            # shared TS types (rarely; prefer co-location)
 
 Route-private components go in `_components/` (Next ignores underscore-prefixed dirs for routing). Cross-route reuse → `components/`.
 
+### Sub-folder guidance inside a feature directory
+
+`components/ui/` (shadcn primitives) — **keep flat as an explicit exception**: shadcn CLI generates files directly under this path and does not support sub-folder targeting. Up to ~30 primitives stays readable. If/when shadcn supports sub-folder generation (or you stop using its CLI), fall back to the same semantic-role split rule used for feature directories (`forms/`, `overlay/`, `display/`, `layout/`).
+
+`components/<feature>/` (feature-specific shared) — **flat up to ~4 files, then split by semantic role**. When a feature directory grows past 4–5 components, group them by what they *do*, not by what they *are*:
+
+```
+components/shell/
+├── layout/              # composition shells, skip links, page wrappers
+├── nav/                 # sidebars, nav lists, mobile sheets
+└── header/ (or topbar/) # top bars, breadcrumbs, theme toggles, user menus
+```
+
+Common axes that work: `layout/`, `nav/`, `header/`, `form/`, `data/`, `feedback/`. Don't over-engineer — a 3-file feature stays flat. The split is triggered by the gut feeling "I can't find anything in here anymore," not by a strict count.
+
+`components/<feature>/` may also nest one more level for sub-features (`shell/nav/sidebar-section/`), but stop there — three levels of nesting hides files.
+
 ## Server vs Client Components
 
 ### Default: Server Component
