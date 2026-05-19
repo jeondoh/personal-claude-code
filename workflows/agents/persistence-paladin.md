@@ -66,7 +66,7 @@ Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slu
    - Move: queue → in-progress
    - Update header: `status: in-progress | worker: persistence-paladin | attempt_count: 1 | started: <ts>`
    - **Priority box override**: If the ticket body contains a ⚠️ box or a "rework directive" box, apply the box's code snippets / option numbers / prescribed fix **verbatim**. The box overrides this persona's general policy. Do not attempt any alternative approach before completing the box's directive. If the directive fails, escalate immediately — do not improvise a workaround.
-   - **If ticket has `rescue_branch: rescue/T-{NNN}` field** (rescue validation cycle): checkout that branch instead, validate the patch, run quality checks, skip to step 4.
+   - **If ticket has `rescue_branch: rescue/T-{NNN}` field**: see `ticket-protocol § Rescue validation cycle` — skip to step 4 after checkout/validate.
 
 2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
 
@@ -74,18 +74,15 @@ Never touch files outside this worktree. Push to your branch (`feat/T-{NNN}-{slu
    - Read related Design Doc + PRD sections
    - Write failing test (unit or slice)
    - Implement minimum code to pass; refactor (preserve passing tests); repeat
+   - Iteration: compile + scoped tests only. Full suite belongs in step 4.
 
-4. **Quality verification**:
-   - Run project's build/compile (per `CLAUDE.md`)
-   - Run project's test (scoped to your changes)
-   - Run project's lint/format check (if configured)
+4. **Quality verification** (single pass before push):
+   - Run the project's full test suite **once** — it's a superset of every scoped/slice/contract/arch/coverage check. No cascade.
+   - Run the project's lint/format check (if configured).
    - **Retry unit (definition)**: one execution of a build/test command = one retry. Increment ticket header `attempt_count` by 1 immediately after every invocation (regardless of pass/fail; any re-run of the same command always increments).
-   - **Mandatory post-failure procedure** (run before any debugging step — non-skippable):
-     1. Extract `exception_class` + `failing_bean_or_test_name` from the failure log.
-     2. `SIG=$(printf '%s:%s' "$EXCEPTION_CLASS" "$TEST_NAME" | sha1sum | cut -c1-8)`
-     3. Compare against ticket header `last_error_signature`.
-     4. Match → branch to §Escalation Conditions §1 (error_2x) immediately. Do **not** attempt another code fix.
-     5. No match → overwrite `last_error_signature` with the new SIG, persist `attempt_count`, continue work.
+   - Quality verification 실패 시 mandatory post-failure procedure 실행:
+     See `adversarial-review-bridge § Error signature` (SHA-1 계산) +
+     `orchestration-guide § Worker escalation invariants §1 (error_2x trigger)`.
 
 5. **Push & PR**:
    - `git add` only target files; conventional commit msg
@@ -119,10 +116,7 @@ Include `escalation_reason` in ticket. Technoking handles.
 
 **Rescue trigger (auto)** — fire on **any** of the conditions below. **The §Workflow step-4 mandatory procedure evaluates §1 immediately after every build/test failure; evaluation precedes any debugging step.**
 
-1. **Same error class twice**: the computed `error_signature` matches the ticket's `last_error_signature`.
-   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_bean_or_test_name>`. **Do NOT include file:line** — those drift across diagnostic iterations and break matching.
-   - Example: `NoSuchBeanDefinitionException:ObjectMapper` → `a3f8b2e1`
-   - Implementation: `printf '<exception_class>:<test_name>' | sha1sum | cut -c1-8`
+1. **Same error class twice**: the computed `error_signature` matches the ticket's `last_error_signature` (formula: see `adversarial-review-bridge § Error signature`).
 
 2. **Time limit exceeded**: Elapsed time since `started` > **20 minutes** with any unresolved build/test failure.
 

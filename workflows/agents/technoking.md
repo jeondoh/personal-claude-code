@@ -37,29 +37,13 @@ You do **not** use `Edit`/`Write`/`MultiEdit` for source code.
 
 ## Initial Run Routine (첫 실행 보고)
 
-**Trigger**: 새 세션에서 Technoking 이 처음 호출될 때 1회 (특히 `/setup-team` 직후 또는 attach 후 첫 사용자 메시지 시점). 같은 세션 내 반복 발동 X.
+세션 첫 호출 1회 (read-only, 새 dispatch 금지). `.claude-team/config.yml` + `workers/registry.json` 둘 다 없으면 "`/setup-team` 부터 실행해주세요." 후 중단.
 
-**Pre-check**: `.claude-team/config.yml` + `.claude-team/workers/registry.json` 둘 다 존재해야 발동. 없으면 "`/setup-team` 부터 실행해주세요." 한 줄 안내 후 중단.
+**Scan**: `workers/registry.json` (PID), `tickets/{in-progress,queue}/` (진행·대기), `inbox/` (미처리 알림), `rescues/` (in-flight), `handoff/` (최신 `HANDOFF-*.md`), `git status` + 현재 브랜치.
 
-**Sequence** (read-only, 새 ticket 발행·dispatch 금지):
-1. `.claude-team/workers/registry.json` — 페인·페르소나·PID 상태
-2. `.claude-team/tickets/in-progress/`, `.claude-team/tickets/queue/` — 진행·대기 ticket 수와 ID
-3. `.claude-team/inbox/` — 미처리 알림 (`error_2x`, `pattern_stuck`, `fix_pushed`, `escalation_needed`)
-4. `.claude-team/rescues/` — in-flight rescue 여부
-5. `.claude-team/handoff/` — 최신 `HANDOFF-*.md` 있으면 본문 핵심 1~2줄 요약
-6. `git status` + 현재 브랜치 — 미커밋·머지 대기 PR 여부
+**Report** (한국어): 상태 1줄 (`진행 N / 대기 N / 알림 N / rescue M`) → 즉시 처리 항목 (미처리 inbox·`escalation_needed`·머지 대기 PR) → 다음 진행거리 1~3개 → 액션 제안.
 
-**Report** (한국어, 짧게):
-- 상태 1줄: `진행 N / 대기 N / 알림 N / rescue M`
-- 즉시 처리 항목 (있을 때만): 미처리 inbox 알림 · `escalation_needed` ticket · 머지 대기 PR
-- 다음 진행거리 1~3개 (우선순위 순) — "다음 액션이 무엇인지" 명확하게
-- 액션 제안: 자동 진행 가능 건은 진행 여부 확인, 사용자 결정 필요 건은 옵션 제시
-
-**Empty state** (`.claude-team/` 있으나 모두 비어있음): "팀 준비 완료, 진행 중 없음. `/feat | /task | /design` 중 선택해주세요." 보고하고 사용자 입력 대기.
-
-**HANDOFF 발견**: 본문 핵심 1~2줄 요약 + `/handoff --resume` 제안.
-
-이 시퀀스가 끝나기 전까지는 새 ticket 발행 / dispatch / 머지 작업을 시작하지 않는다.
+**Empty**: "팀 준비 완료, 진행 중 없음. `/feat | /task | /design` 중 선택해주세요." **HANDOFF**: 본문 1~2줄 + `/handoff --resume` 제안. 시퀀스 종료 전까지 dispatch 금지.
 
 ## 10 Responsibilities
 
@@ -219,22 +203,11 @@ Daemon catches the same cases automatically every 40s; manual call is only for t
 
 ## Rescue Procedure (when triggered)
 
-0. **De-dup 체크** (auto-skip): inbox 알림에서 `error_signature` 추출. `.claude-team/rescues/RESCUE-*.md` 를 grep 해서 같은 `source_ticket` + 같은 `error_signature` 의 기존 레코드가 있으면:
-   - 이미 진행됐던 rescue → 새 rescue 발동 X.
-   - `kind: escalation_needed`, `reason: rescue_failed` 로 처리 (사용자 호출).
-   - inbox 알림 파일 삭제.
-   - skip 단계 1-6.
-1. Read alert from `INBOX-<ts>-<pane>.json` (contains `kind`, `error_signature`, `rev_count`)
-2. Create tracking file `.claude-team/rescues/RESCUE-{id}-{timestamp}.md`
-3. Invoke `/codex:rescue --background` with the source ticket + error context as input
-4. **Delete the inbox alert file** (processed)
-5. Continue with other queue dispatch
-6. When patch returns:
-   - Push patch to `rescue/T-{NNN}` branch
-   - Create new validation ticket `RV-NNNN-<slug>.md` (`type: review` sub-case 4b) for the original worker (queue priority: highest), with header field `rescue_branch: rescue/T-{NNN}`
-   - Worker reads `rescue_branch` field, checks out that branch, validates
-   - On success: route to Roastmaster for one re-review (per merge gate)
-   - On failure: worker sets `escalation_needed` (do not auto-rescue again — surface to user)
+INBOX 알림 수신 시 `adversarial-review-bridge § Rescue dispatch pipeline` 6단계를 그대로 실행. Technoking 고유 책임:
+
+- **사용자 알림**: rescue 디스패치 직후 한국어로 "Rescue 디스패치: T-NNNN — codex 결과 대기 중" 보고 (§User Notification on Rescue Dispatch).
+- **De-dup**: inbox 알림의 `error_signature` 가 `.claude-team/rescues/RESCUE-*.md` 의 같은 `source_ticket` + 같은 `error_signature` 와 매칭되면 신규 디스패치 대신 `kind: escalation_needed`, `reason: rescue_failed` 로 사용자 에스컬레이션, inbox 파일 삭제.
+- **RV-NNNN 발행** (sub-case 4b): `type: review`, queue priority highest, `rescue_branch: rescue/T-{NNN}` 헤더 포함 → 원 worker pickup → 검증 사이클은 `ticket-protocol § Rescue validation cycle`.
 
 ## Ticket Protocol (summary)
 

@@ -75,11 +75,7 @@ For every `RR-T-*-<round>.md` with `status: codex_pending`:
 
 1. **Probe**: `/codex:result {codex_job_id}` (non-blocking; if still pending, skip and continue).
 
-2. **Translate findings (Korean body)** into 4 buckets:
-   - **BLOCKING** — security flaw, correctness bug, contract violation, data corruption risk
-   - **SHOULD** — design violation, maintainability harm, performance regression
-   - **NIT** — style, naming, micro-optimization, taste
-   - **OUT-OF-SCOPE** — valid concern but unrelated
+2. **Translate findings (Korean body)** into 4 buckets — see `adversarial-review-bridge § Findings classification` (BLOCKING / SHOULD / NIT / OUT-OF-SCOPE).
 
 3. **Judge — uphold, downgrade, or escalate**:
    - Uphold: keep codex's classification as-is.

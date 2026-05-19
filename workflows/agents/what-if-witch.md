@@ -87,7 +87,7 @@ Stack-agnostic. Read project conventions in priority: (1) `CLAUDE.md` (test comm
 
 ### Rescue validation cycle (when ticket has `rescue_branch`)
 
-Checkout `rescue_branch`, run all tests against the patch, report PASS or escalate.
+See `ticket-protocol § Rescue validation cycle`.
 
 ## Escalation Conditions
 
@@ -99,8 +99,7 @@ Set `status: escalation_needed` when:
 
 **Rescue trigger (auto)** — fire on **any** of the following:
 
-1. **Same error class twice**: Same exception class + failing test name in 2 consecutive `attempt_count` increments.
-   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_test_name>`. **Do NOT include file:line** — those drift and break matching. Example: `ContainerStartException:testUserRegistration` → `c7d2e3f1`. Implementation: `printf '<class>:<test>' | sha1sum | cut -c1-8`
+1. **Same error class twice**: Same exception class + failing test name in 2 consecutive `attempt_count` increments (formula: see `adversarial-review-bridge § Error signature`).
 2. **Time limit**: Elapsed time since `started` > **20 minutes** with unresolved failure.
 3. **Attempt limit**: `attempt_count` ≥ **3** with ongoing failure.
 

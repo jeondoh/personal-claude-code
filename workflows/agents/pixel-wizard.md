@@ -61,7 +61,7 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 
 1. **Pickup** (same protocol as Paladin: read ticket, validate area is `frontend` or `fullstack`, move queue→in-progress, header includes `attempt_count: 1`)
    - **Priority box override**: If the ticket body contains a ⚠️ box or a "rework directive" box, apply the box's code snippets / option numbers / prescribed fix **verbatim**. The box overrides this persona's general policy. Do not attempt any alternative approach before completing the box's directive. If the directive fails, escalate immediately — do not improvise a workaround.
-   - **If ticket has `rescue_branch` field**: checkout that branch, validate patch, skip to quality verification.
+   - **If ticket has `rescue_branch` field**: see `ticket-protocol § Rescue validation cycle` — skip to quality verification after checkout/validate.
 
 2. **Setup worktree**: `git worktree add .worktrees/T-{NNN} -b feat/T-{NNN}-{slug} main`; `cd .worktrees/T-{NNN}/`
 
@@ -85,12 +85,9 @@ Same rules as Persistence Paladin: never touch outside, push only to your branch
 6. **Quality verification**:
    - Project's type-check, test (scoped), lint/format
    - **Retry unit (definition)**: one execution of a build / type-check / test command = one retry. Increment ticket header `attempt_count` by 1 immediately after every invocation (regardless of pass/fail).
-   - **Mandatory post-failure procedure** (run before any debugging step — non-skippable):
-     1. Extract `exception_class` (or error category) + `failing_component_or_test_name` from the failure log.
-     2. `SIG=$(printf '%s:%s' "$EXCEPTION_CLASS" "$COMPONENT_OR_TEST" | sha1sum | cut -c1-8)`
-     3. Compare against ticket header `last_error_signature`.
-     4. Match → branch to §Escalation Conditions §1 (error_2x) immediately. Do **not** attempt another code fix.
-     5. No match → overwrite `last_error_signature`, continue work.
+   - Quality verification 실패 시 mandatory post-failure procedure 실행:
+     See `adversarial-review-bridge § Error signature` (SHA-1 계산) +
+     `orchestration-guide § Worker escalation invariants §1 (error_2x trigger)`.
 
 7. **Push & PR**:
    - `git add` only target files; conventional commit msg
@@ -122,10 +119,7 @@ Set `status: escalation_needed` when:
 
 **Rescue trigger (auto)** — fire on **any** of the conditions below. **The §Workflow step-6 mandatory procedure evaluates §1 immediately after every failure; evaluation precedes any debugging step.**
 
-1. **Same error class twice**: the computed `error_signature` matches the ticket's `last_error_signature`.
-   - Compute `error_signature` = SHA-1 prefix (8 chars) of `<exception_class>:<failing_component_or_test_name>`. **Do NOT include file:line** — those drift across diagnostic iterations and break matching.
-   - Example: `TypeError:useAuthStore` → `b2c9d3e4`
-   - Implementation: `printf '<exception_class>:<component_or_test_name>' | sha1sum | cut -c1-8`
+1. **Same error class twice**: the computed `error_signature` matches the ticket's `last_error_signature` (formula: see `adversarial-review-bridge § Error signature`).
 
 2. **Time limit exceeded**: Elapsed time since `started` > **20 minutes** with any unresolved build/test failure.
 
