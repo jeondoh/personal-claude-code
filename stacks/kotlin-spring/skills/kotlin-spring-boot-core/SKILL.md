@@ -315,7 +315,23 @@ class OrderService(/* ... */) {
 ### Web layer
 
 - `@RestController` for JSON. `@Controller` for server-rendered pages (rare).
-- Controllers stay **thin**: validate → map Request→Command → call service → map View→Response. No business branches.
+- **Controller Bar (enforceable)** — Controllers stay **thin**. Body of any `@RestController` method does **exactly 5 things, in order**:
+  1. Receive HTTP-level inputs (`@RequestBody`/`@RequestParam`/`@RequestHeader`/`HttpServletRequest`).
+  2. Pack them into a single `Command`/`Query` via a trivial `from(...)` factory (no branching inside the factory other than nullable defaults).
+  3. Call **one** application-service method.
+  4. Map the returned `View`/`Result` to a `Response` via a trivial `toResponse()` mapper.
+  5. Return `ResponseEntity` (or throw — `@RestControllerAdvice` handles it).
+
+  **FORBIDDEN inside any `@RestController` class** (each occurrence = Roastmaster BLOCKING):
+  - `when`/`if`/`?:` **business branches** (kind dispatch, componentId routing, status-based dispatch). Nullable-default fallbacks (`headerRequestId ?: MDC.get("requestId")`) are the only exception.
+  - `JsonNode` / `Map<String, Any>` / raw `String` parsing helpers (`extract*`, `parse*`, `dispatchTo*`). All payload shaping lives in `application/` parsers.
+  - Auth / token / signature verification — must be a `Filter`, `HandlerInterceptor`, or `@PreAuthorize`. Controller does not read query-string `token`.
+  - Cross-cutting concerns: `requestId`/UUID generation, MDC mutation, audit-log persistence, progress logging (`logger.info("step N …")` × N). Single entry/exit log only via interceptor/AOP.
+  - **Private helper methods** in the controller class, except a `companion object` Request/Response factory when absolutely necessary. Move helpers to `application/` parsers/mappers.
+  - Direct repository / JPA / `ObjectMapper` access.
+  - More than **one** collaborator injected per controller method's call path — a controller routes to a single application boundary (Facade or service method), not orchestrates 3–5 collaborators.
+
+  Numeric guideline (Roastmaster threshold): controller method body ≤ **8 lines** excluding blank lines and the signature. Controller class total ≤ **40 lines** for a single endpoint pair. Beyond either → extract to application Facade.
 - Validation: `@Valid` + `jakarta.validation` on Request.
 - Error envelope: one `@RestControllerAdvice`, uniform shape `{ error: { code, message, details } }`. No raw stack traces to clients.
 
