@@ -16,11 +16,12 @@ This skill is the bar for any DB-touching code. Companion skills - `kotlin-sprin
 | Need | Use | Why |
 |---|---|---|
 | Standard CRUD on aggregates with relations | Spring Data JPA + Hibernate | mapping reuse, repository abstraction |
-| Read-heavy queries with shape that doesn't match aggregates | `JdbcClient` (Spring 6) | direct SQL, predictable performance, no entity hydration cost |
+| Dynamic queries (variable predicates / sorts / projections) | Querydsl (`JPAQueryFactory`) | type-safe builder over JPQL, no string concatenation, refactor-safe |
+| Read-heavy queries with shape that doesn't match aggregates | Querydsl projection first; `JdbcClient` (Spring 6) only when measurement shows it matters | preserve type-safety; bypass JPA only when hot-path performance demands it |
 | Reactive / non-blocking | R2DBC | when the entire request path is reactive — don't mix with blocking JPA in same module |
-| Bulk operations | `JdbcClient` or native `EntityManager` | JPA's `saveAll` does N round trips; use batched SQL |
+| Bulk operations | JPA batched insert (`saveAll` + `hibernate.jdbc.batch_size`) → Querydsl batch → `JdbcClient` last resort | favor stack consistency; drop down only when batch size or write volume measurably overruns |
 
-Default: JPA for write paths, `JdbcClient` for reporting/list endpoints. Document the choice in the Design Doc.
+Default: **JPA + Querydsl**. `JdbcClient` is opt-in for hot-path read or bulk where Querydsl was measured to be insufficient — document the measurement in the Design Doc or ADR.
 
 ## JPA / Hibernate rules
 
@@ -45,8 +46,28 @@ Default: JPA for write paths, `JdbcClient` for reporting/list endpoints. Documen
 
 - Spring Data derived queries (`findByEmail`, `findAllByStatusIn`) for simple cases.
 - `@Query("SELECT ... FROM Entity ...")` JPQL for joins, projections, aggregations.
-- Native SQL (`@Query(value = "...", nativeQuery = true)`) only when JPQL cannot express the query (e.g., DB-specific window functions). Document why.
+- Native SQL (`@Query(value = "...", nativeQuery = true)`) only when JPQL **and Querydsl** both cannot express the query (e.g., DB-specific window functions). Document why.
 - Projections (interface-based or DTO `select new`) for read endpoints — don't hydrate full entities for response payloads.
+
+### Querydsl (dynamic queries)
+
+Type-safe builder over JPQL. Required when:
+
+- Predicates depend on optional inputs (filters, search, admin list with arbitrary `WHERE` combinations).
+- Projections target DTOs whose shape is decided per-endpoint.
+- Joins must be composed conditionally.
+
+Conventions:
+
+- One `JPAQueryFactory` bean wired in `infrastructure/QuerydslConfig.kt`. Inject into repository implementations only — never into `application/` or `domain/`.
+- Generated Q-types live under `build/generated/` — exclude from coverage and ArchUnit scans.
+- Projections via `Projections.constructor(DtoClass::class.java, ...)` (or `bean(...)` when a no-arg constructor is required). Don't hydrate full entities for read endpoints.
+- Pagination: pair Querydsl `OrderSpecifier` with the same `Pageable` contract — `PageableExecutionUtils.getPage(content, pageable) { countQuery.fetchOne() ?: 0 }`.
+
+When **not** Querydsl:
+
+- Single-static-predicate query — Spring Data derived method name (`findByEmail`, `findAllByStatusIn`) is simpler.
+- Hot-path read where Querydsl-generated SQL is measurably worse → `JdbcClient` with a Design Doc / ADR note (see §JdbcClient).
 
 ### Pagination
 

@@ -37,7 +37,7 @@
       "name": "stack-kotlin-spring",
       "source": "./stacks/kotlin-spring",
       "strict": true,
-      "version": "0.2.1",
+      "version": "0.3.0",
       "description": "Kotlin + Spring Boot stack pack — coding rules, data access patterns, testing skills, stop-verification hook",
       "author": {
         "name": "sideholic",
