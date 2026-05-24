@@ -15,11 +15,8 @@ and surfaces orphan worktrees for user-confirmed removal.
 
 ## Steps
 
-**Step 1 — Archive done tickets (threshold: 30 days)**
-Glob `tickets/done/*.md`. For each file where mtime > 30 days ago:
-- Determine target: `archive/<YYYY-MM>/done/` where YYYY-MM is file's mtime month.
-- Create target dir if needed, then `mv` file atomically.
-- Accumulate count.
+**Step 1 — Done tickets: PERMANENTLY RETAINED (no archive, no delete)**
+`tickets/done/*.md` are a permanent record asset. **Do NOT archive or delete them, regardless of age** (the 30-day threshold no longer applies to done). Skip this step entirely — leave all done tickets in `tickets/done/`.
 
 **Step 2 — Archive cancelled tickets (threshold: 7 days)**
 Glob `tickets/cancelled/*.md`. For each file where mtime > 7 days ago:
@@ -64,7 +61,7 @@ then again after step 6. Report freed space.
 /cleanup complete
 
 Archived:
-  done tickets:       <N>  (→ archive/<YYYY-MM>/done/)
+  done tickets:       (retained — permanent, not archived)
   cancelled tickets:  <N>  (→ archive/<YYYY-MM>/cancelled/)
   review reports:     <N>  (→ archive/<YYYY-MM>/reviews/)
   rescues:            <N>  (→ archive/<YYYY-MM>/rescues/)

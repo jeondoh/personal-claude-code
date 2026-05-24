@@ -36,7 +36,7 @@
 ```
 tickets/queue/        ← Technoking 발행
 tickets/in-progress/  ← 워커 작업 중
-tickets/done/         ← 완료 (auto-archive 30d)
+tickets/done/         ← 완료 (영구 보존 — archive·삭제 X)
 tickets/cancelled/    ← 취소 (auto-archive 7d)
 reviews/              ← Roastmaster 보고서 (RR-T-NNNN-N.md)
 inbox/                ← 워커→Technoking 알림

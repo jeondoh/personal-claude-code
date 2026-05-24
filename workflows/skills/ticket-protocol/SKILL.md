@@ -14,7 +14,7 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 ├── tickets/
 │   ├── queue/         # published, unclaimed
 │   ├── in-progress/   # claimed and being worked (also holds in_review status)
-│   ├── done/          # merged (auto-archive 30d)
+│   ├── done/          # merged (permanently retained — no archive, no delete)
 │   └── cancelled/     # cancelled before merge (auto-archive 7d)
 ├── reviews/           # Roastmaster review reports (RR-T-*.md, archive 30d after merge)
 ├── inbox/             # worker → Technoking notifications (transient, deleted on read)
@@ -282,7 +282,7 @@ codex 가 만들어준 rescue 패치를 검증하는 `RV-NNNN` ticket (sub-case 
 - **Dispatch deps**: Technoking checks `depends_on` before dispatching; unresolved-dep tickets stay in `tickets/queue/` and are reconsidered each poll. Workers don't check `depends_on` — if it's in their queue, it's ready.
 - **Atomicity**: claiming = `mv` file + create worktree + edit frontmatter (`status`, `assignee`, `updated`) in one shell sequence (`mv`, not `git mv` — `.claude-team/` is gitignored). Orphans surfaced by `/cleanup`.
 - **Updating**: every state change bumps `updated`. Read full file → modify → write whole file atomically. No in-place sed substitution.
-- **Archive**: `/cleanup` moves done >30d and cancelled >7d into `archive/{YYYY-MM}/`. Archived files retain original IDs/contents — read-only.
+- **Archive**: `/cleanup` archives `cancelled` (>7d), `rescues` (>30d), `reviews` (>30d post-merge) into `archive/{YYYY-MM}/`. **`done` tickets are permanently retained in `tickets/done/` — never archived or deleted, regardless of age** (record asset). Archived files retain original IDs/contents — read-only.
 - **Concurrency**: multiple workers may sit in `tickets/in-progress/` (different IDs) but cannot touch overlapping `files_in_scope` — Technoking's step-6 decomposition prevents overlap; if unavoidable, sequence via `depends_on`.
 
 ## Registry — `workers/registry.json`

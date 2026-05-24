@@ -239,7 +239,7 @@ Ticket header common fields: `status`, `worker`, `attempt_count`, `started`, `es
 
 **Archive policy** (수동 트리거 only):
 - `/cleanup` 실행 시 적용
-- `tickets/done/*` > 30일 → `archive/{YYYY-MM}/done/`
+- `tickets/done/*` — **영구 보존. archive·삭제 대상 아님** (기록 자산, 30일 경과해도 `tickets/done/` 유지)
 - `tickets/cancelled/*` > 7일 → `archive/{YYYY-MM}/cancelled/`
 - `rescues/*` > 30일 → `archive/{YYYY-MM}/rescues/`
 - `reviews/*` > 30일 (merged_at 기준) → `archive/{YYYY-MM}/reviews/`
