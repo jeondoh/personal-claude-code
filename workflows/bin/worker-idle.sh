@@ -163,6 +163,24 @@ EOF
       wait "$CLAUDE_PID" 2>/dev/null
       rm -f "$SENTINEL"
 
+      # Sync ticket frontmatter status from latest INBOX — blocks watchdog false positives
+      if [[ -n "$ticket_file" && -f "$ticket_file" ]]; then
+        latest_inbox=$(ls -t "${CLAUDE_TEAM_DIR}/inbox/INBOX-"*"-${PANE_NAME}.json" 2>/dev/null | head -1)
+        if [[ -n "$latest_inbox" ]]; then
+          inbox_kind=$(grep -o '"kind"[[:space:]]*:[[:space:]]*"[^"]*"' "$latest_inbox" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+          new_status=""
+          case "$inbox_kind" in
+            completion|review_complete|fix_pushed) new_status="ready-for-review" ;;
+            escalation_needed|error_2x|pattern_stuck) new_status="escalated" ;;
+          esac
+          if [[ -n "$new_status" ]] && grep -q '^status:' "$ticket_file"; then
+            sed -i.bak "s/^status:.*/status: $new_status/" "$ticket_file" 2>/dev/null \
+              && rm -f "${ticket_file}.bak"
+            printf '[%s] ticket status → %s (inbox: %s)\n' "$(ts)" "$new_status" "$inbox_kind"
+          fi
+        fi
+      fi
+
       END_TS=$(date +%s)
       DURATION=$(( END_TS - START_TS ))
       if [[ $DURATION -lt 10 ]]; then

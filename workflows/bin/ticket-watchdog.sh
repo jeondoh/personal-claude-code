@@ -103,7 +103,9 @@ if [[ -n "$TICKET_FILE" ]]; then
   esac
   for f in "${CLAUDE_TEAM_DIR}/tickets/in-progress/"*.md; do
     [[ -f "$f" ]] || continue
-    if grep -q "owner: $EXPECTED_PERSONA\|worker: $EXPECTED_PERSONA\|assignee: $EXPECTED_PERSONA" "$f" 2>/dev/null; then
+    # skip finished/escalated tickets lingering in in-progress/ (worker forgot mv)
+    if grep -q "owner: $EXPECTED_PERSONA\|worker: $EXPECTED_PERSONA\|assignee: $EXPECTED_PERSONA" "$f" 2>/dev/null \
+       && grep -qE "^status:[[:space:]]*(in_progress|claimed)\$" "$f" 2>/dev/null; then
       TICKET_FILE="$f"
       TICKET_ID=$(grep '^id:' "$f" | head -1 | awk '{print $2}')
       TICKET_OWNER="$EXPECTED_PERSONA"
@@ -137,6 +139,17 @@ fi
 # Without an active ticket there is no work to be stuck on.
 if [[ -z "$TICKET_ID" ]]; then
   echo "{\"pane\":\"$PANE_NAME\",\"verdict\":\"idle_no_ticket\",\"action\":\"skip\"}"
+  exit 0
+fi
+
+# Early skip: no live claude under pane shell → idle polling with stale ticket file
+SHELL_PID=$(tmux display-message -t "$PANE_ID" -p '#{pane_pid}' 2>/dev/null)
+CLAUDE_ALIVE=0
+if [[ -n "$SHELL_PID" ]]; then
+  pgrep -P "$SHELL_PID" -f 'claude' >/dev/null 2>&1 && CLAUDE_ALIVE=1
+fi
+if [[ "$CLAUDE_ALIVE" -eq 0 ]]; then
+  echo "{\"pane\":\"$PANE_NAME\",\"verdict\":\"claude_idle\",\"action\":\"skip\"}"
   exit 0
 fi
 
@@ -261,11 +274,10 @@ elif [[ "$IDLE_AGE" -ge "$IDLE_THRESHOLD_SECONDS" \
   SUGGESTED_REASON="stagnation:idle=${IDLE_AGE}s,stale=${STALE_AGE}s,stagnation=${STAGNATION_AGE}s"
   TOUCH_SENTINEL=1
 
-# Rule 4: AMBIGUOUS — at least one signal but not enough to confirm
-#         Worker may be in big-but-legit thinking. Keep worker alive, ask user.
+# Rule 4: AMBIGUOUS — live claude + single signal → likely noise; no INBOX, keep worker alive
 elif [[ "$SIGNAL_COUNT" -ge 1 ]]; then
   VERDICT="ambiguous"
-  SUGGESTED_KIND="pattern_question"
+  SUGGESTED_KIND=""
   TOUCH_SENTINEL=0
 
 # Rule 5: NORMAL — should not reach here, but defensive
