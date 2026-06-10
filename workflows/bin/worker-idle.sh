@@ -135,10 +135,35 @@ EOMSG
       CLAUDE_ARGS+=(--append-system-prompt-file "$PROMPT_FILE")
       claude "${CLAUDE_ARGS[@]}" "$first_msg" &
       CLAUDE_PID=$!
-      TICKET_TIMEOUT="${CLAUDE_TEAM_TICKET_TIMEOUT:-1800}"
+      # Adaptive ticket timeout: start at the base deadline and extend in
+      # GRACE_EXTEND steps (checked GRACE_BEFORE sec before each deadline) as long
+      # as the worker shows progress, never past TICKET_HARD_CAP. A stalled or dead
+      # claude is still ended promptly (the while-condition + the no-progress branch).
+      TICKET_TIMEOUT="${CLAUDE_TEAM_TICKET_TIMEOUT:-1800}"    # base deadline (30m)
+      TICKET_HARD_CAP="${CLAUDE_TEAM_TICKET_HARD_CAP:-3600}"  # absolute ceiling (60m)
+      GRACE_BEFORE="${CLAUDE_TEAM_GRACE_BEFORE:-120}"         # check this many sec before deadline (2m)
+      GRACE_EXTEND="${CLAUDE_TEAM_GRACE_EXTEND:-600}"         # extend by this much per grace (10m)
       START_TS=$(date +%s)
+      deadline=$TICKET_TIMEOUT
+      grace_checked=-1
+      prev_fp=""
+      ticket_id=$(printf '%s' "$ticket_file" | grep -oE 'T-[0-9]+' | head -1)
+      repo_root="$(dirname "$CLAUDE_TEAM_DIR")"
 
-      # Watchdog: poll for sentinel, claude dying, or timeout.
+      # Progress fingerprint of the ticket's worktree: commit count + whether any
+      # file changed within the last GRACE_BEFORE sec. Falls back to "alive"
+      # (claude-liveness only) when no matching worktree is found.
+      worker_progress_fp() {
+        local wt now commits active
+        wt=$(ls -d "${repo_root}/.worktrees/${ticket_id}-"* 2>/dev/null | head -1)
+        [[ -z "$wt" || ! -d "$wt" ]] && { printf 'alive'; return; }
+        now=$(date +%s)
+        commits=$(git -C "$wt" rev-list --count HEAD 2>/dev/null || printf '0')
+        active=$(find "$wt" -type f -not -path '*/.git/*' -newermt "@$(( now - GRACE_BEFORE ))" 2>/dev/null | head -1)
+        printf 'c%s-%s' "$commits" "$([[ -n "$active" ]] && printf 'a' || printf 'i')"
+      }
+
+      # Watchdog: poll for sentinel, claude dying, or timeout (with adaptive grace).
       while kill -0 "$CLAUDE_PID" 2>/dev/null; do
         if [[ -f "$SENTINEL" ]]; then
           sleep 2
@@ -148,8 +173,22 @@ EOMSG
           break
         fi
         ELAPSED=$(( $(date +%s) - START_TS ))
-        if [[ $ELAPSED -ge $TICKET_TIMEOUT ]]; then
-          printf '[%s] ticket timeout (%ds) — claude 강제 종료\n' "$(ts)" "$ELAPSED"
+        # Approaching the current deadline: if still making progress, extend (capped).
+        if (( ELAPSED >= deadline - GRACE_BEFORE )) && (( deadline < TICKET_HARD_CAP )) && (( grace_checked != deadline )); then
+          grace_checked=$deadline
+          fp=$(worker_progress_fp)
+          if [[ "$fp" == "alive" || "$fp" != "$prev_fp" ]]; then
+            new_deadline=$(( deadline + GRACE_EXTEND ))
+            (( new_deadline > TICKET_HARD_CAP )) && new_deadline=$TICKET_HARD_CAP
+            printf '[%s] 진행 확인(%s) — deadline %ds→%ds 유예 (cap %ds)\n' "$(ts)" "$fp" "$deadline" "$new_deadline" "$TICKET_HARD_CAP"
+            deadline=$new_deadline
+            prev_fp="$fp"
+          else
+            printf '[%s] 진행 정체(%s) — 유예 없음, %ds 에 중단 예정\n' "$(ts)" "$fp" "$deadline"
+          fi
+        fi
+        if [[ $ELAPSED -ge $deadline ]]; then
+          printf '[%s] ticket timeout (%ds, cap %ds) — claude 강제 종료\n' "$(ts)" "$ELAPSED" "$TICKET_HARD_CAP"
           INBOX_TS=$(TZ=Asia/Seoul date +'%Y%m%dT%H%M%S+0900')
           cat > "${CLAUDE_TEAM_DIR}/inbox/INBOX-${INBOX_TS}-${PANE_NAME}.json" <<EOF
 { "kind": "escalation_needed", "reason": "ticket_timeout", "pane": "${PANE_NAME}", "elapsed_seconds": ${ELAPSED}, "ticket_file": "${ticket_file}" }
