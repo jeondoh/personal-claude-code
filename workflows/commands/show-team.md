@@ -32,8 +32,8 @@ Personas with `pane: subagent` always show `—` in the PID column.
 1  Technoking            Tech Lead              opus    main           <pid>
 2  Spec Shaman           Product Owner          sonnet  subagent       —
 3  Galaxy Brain          System Architect       opus    subagent       —
-4  Persistence Paladin   Backend / DB / Sec     sonnet  worker-be      <pid>
-5  Pixel Wizard          Frontend / a11y        sonnet  worker-fe      <pid>
+4  Persistence Paladin   Backend / DB / Sec     opus    worker-be      <pid>
+5  Pixel Wizard          Frontend / a11y        opus    worker-fe      <pid>
 6  What-If Witch         QA                     sonnet  worker-qa      <pid>
 7  The Roastmaster       Code Reviewer          opus    worker-review  <pid>
 ```

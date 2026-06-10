@@ -31,6 +31,7 @@ Technoking collects the new persona spec from the user (single Stop, format belo
   - display name:   (예: DevOps Druid)
   - role:           (한 줄, 예: CI/CD pipelines and infra observability)
   - model:          opus | sonnet | haiku
+  - effort:         (선택) low | medium | high | xhigh — worker 발화 시 `--effort` 로 전달
   - pane:           subagent | worker-<custom> (subagent 권장 — 신규 pane 은 tmux-setup.sh 수정 필요)
   - inherits:       기존 SKILL 이름들 (예: coding-principles, git-flow)
   - 영역 (한 줄):    이 페르소나만의 기여 영역

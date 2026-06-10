@@ -9,8 +9,8 @@
 | 1 | **Technoking** | Tech Lead — 라이프사이클 마스터, ticket 분배, rescue 디스패치 | **opus** | `main` |
 | 2 | **Spec Shaman** | Product Owner — PRD 작성 (사용자 산출물, 한국어) | sonnet | subagent |
 | 3 | **Galaxy Brain** | System Architect — Design Doc·ADR·인터페이스 설계 | **opus** | subagent |
-| 4 | **Persistence Paladin** | Backend — Kotlin/Spring, DB, 보안 흡수 | sonnet | `worker-be` |
-| 5 | **Pixel Wizard** | Frontend — Next.js, 디자인·a11y 흡수 | sonnet | `worker-fe` |
+| 4 | **Persistence Paladin** | Backend — Kotlin/Spring, DB, 보안 흡수 | **opus** (effort: medium) | `worker-be` |
+| 5 | **Pixel Wizard** | Frontend — Next.js, 디자인·a11y 흡수 | **opus** (effort: medium) | `worker-fe` |
 | 6 | **What-If Witch** | QA — 인수 테스트 선행, 통합·E2E 검증 | sonnet | `worker-qa` |
 | 7 | **The Roastmaster** | Code Reviewer — codex 비차단 dispatch + verdict 판정 + pattern_stuck 추적 (자체 diff 워크 X) | **opus** | `worker-review` |
 

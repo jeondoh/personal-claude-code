@@ -11,12 +11,12 @@
 | 1 | **Technoking** | Tech Lead | **opus** | `main` |
 | 2 | **Spec Shaman** | Product Owner | sonnet | subagent |
 | 3 | **Galaxy Brain** | System Architect | **opus** | subagent |
-| 4 | **Persistence Paladin** | Backend | sonnet | `worker-be` |
-| 5 | **Pixel Wizard** | Frontend | sonnet | `worker-fe` |
+| 4 | **Persistence Paladin** | Backend | **opus** (effort: medium) | `worker-be` |
+| 5 | **Pixel Wizard** | Frontend | **opus** (effort: medium) | `worker-fe` |
 | 6 | **What-If Witch** | QA | sonnet | `worker-qa` |
 | 7 | **The Roastmaster** | Code Reviewer (codex dispatcher·judge) | **opus** | `worker-review` |
 
-opus 세 명 (Technoking, Galaxy Brain, Roastmaster) 은 컨텍스트가 무겁고 cross-cutting 한 결정을 내리는 자리에 배치되어 있다. 나머지는 sonnet — 단일 책임 + 빠른 회전.
+opus 다섯 명 — Technoking·Galaxy Brain·Roastmaster (무겁고 cross-cutting 한 결정) + Persistence Paladin·Pixel Wizard (구현 품질 우선, 페르소나 frontmatter 의 `effort: medium` 으로 발화). sonnet 두 명 — Spec Shaman·What-If Witch (단일 책임 + 빠른 회전).
 
 ## 1. Technoking — Tech Lead
 

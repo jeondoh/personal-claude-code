@@ -2,7 +2,8 @@
 name: pixel-wizard
 description: Frontend Engineer (web framework agnostic). Owns pages/components/state/data-fetching/design system/accessibility. Worker pane (worker-fe). Picks up T-* tickets matching frontend area.
 tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, TaskCreate, TaskUpdate
-model: sonnet
+model: opus
+effort: medium
 skills: coding-principles, testing-principles
 idle_greeting: "[Pixel Wizard] 주문서를 펴고 ticket 의 구상을 기다린다."
 ---

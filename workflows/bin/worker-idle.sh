@@ -47,6 +47,7 @@ GREETING="$(fm_field "$PERSONA_FILE" idle_greeting)"
 
 MODEL="$(fm_field "$PERSONA_FILE" model)"
 [[ -z "$MODEL" ]] && MODEL="sonnet"
+EFFORT="$(fm_field "$PERSONA_FILE" effort)"
 
 SENTINEL_DIR="${CLAUDE_TEAM_DIR}/.runtime"
 SENTINEL="${SENTINEL_DIR}/${PANE_NAME}.complete"
@@ -129,10 +130,10 @@ Do not skip the sentinel step — without it the worker pane stays blocked on th
 EOMSG
 )
 
-      claude --dangerously-skip-permissions \
-        --model "$MODEL" \
-        --append-system-prompt-file "$PROMPT_FILE" \
-        "$first_msg" &
+      CLAUDE_ARGS=(--dangerously-skip-permissions --model "$MODEL")
+      [[ -n "$EFFORT" ]] && CLAUDE_ARGS+=(--effort "$EFFORT")
+      CLAUDE_ARGS+=(--append-system-prompt-file "$PROMPT_FILE")
+      claude "${CLAUDE_ARGS[@]}" "$first_msg" &
       CLAUDE_PID=$!
       TICKET_TIMEOUT="${CLAUDE_TEAM_TICKET_TIMEOUT:-1800}"
       START_TS=$(date +%s)

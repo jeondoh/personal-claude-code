@@ -12,7 +12,7 @@
       "name": "workflows",
       "source": "./workflows",
       "strict": true,
-      "version": "0.8.3",
+      "version": "0.8.4",
       "description": "Stack-agnostic core: 7 personas, tmux pane orchestration, ticket protocol, git flow, codex adversarial-review bridge",
       "author": {
         "name": "sideholic",

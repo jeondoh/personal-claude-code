@@ -32,8 +32,8 @@ Workers are **headless `claude` instances in tmux panes**, isolated in their own
 
 ```
 main          → technoking            (opus)
-worker-be     → persistence-paladin   (sonnet)
-worker-fe     → pixel-wizard          (sonnet)
+worker-be     → persistence-paladin   (opus, effort: medium)
+worker-fe     → pixel-wizard          (opus, effort: medium)
 worker-qa     → what-if-witch         (sonnet)
 worker-review → the-roastmaster       (opus)
 ```

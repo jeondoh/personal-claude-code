@@ -167,8 +167,8 @@ stacks/<name>/
 | **Technoking** | Tech Lead — 라이프사이클·작업 분배·머지 게이트 | **opus** | `main` |
 | **Spec Shaman** | Product Owner — PRD 작성 | sonnet | subagent |
 | **Galaxy Brain** | System Architect — 설계 문서 · ADR | **opus** | subagent |
-| **Persistence Paladin** | Backend — DB · API · 서버 보안 | sonnet | `worker-be` |
-| **Pixel Wizard** | Frontend — UI · 접근성 · 프론트엔드 보안 | sonnet | `worker-fe` |
+| **Persistence Paladin** | Backend — DB · API · 서버 보안 | **opus** (effort: medium) | `worker-be` |
+| **Pixel Wizard** | Frontend — UI · 접근성 · 프론트엔드 보안 | **opus** (effort: medium) | `worker-fe` |
 | **What-If Witch** | QA — 인수 테스트 · 통합 · E2E | sonnet | `worker-qa` |
 | **The Roastmaster** | Code Reviewer — codex 리뷰 디스패치 + 판정 | **opus** | `worker-review` |
 

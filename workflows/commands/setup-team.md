@@ -37,8 +37,8 @@ personas:
   technoking:           { model: opus,   pane: main }
   spec-shaman:          { model: sonnet, pane: subagent }
   galaxy-brain:         { model: opus,   pane: subagent }
-  persistence-paladin:  { model: sonnet, pane: worker-be }
-  pixel-wizard:         { model: sonnet, pane: worker-fe }
+  persistence-paladin:  { model: opus,   effort: medium, pane: worker-be }
+  pixel-wizard:         { model: opus,   effort: medium, pane: worker-fe }
   what-if-witch:        { model: sonnet, pane: worker-qa }
   the-roastmaster:      { model: opus,   pane: worker-review }
 ```

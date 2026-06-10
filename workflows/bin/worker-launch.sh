@@ -108,6 +108,7 @@ tmux select-pane -t "$PANE_ID" &>/dev/null || die_pre "tmux pane not found: $PAN
 
 MODEL="$(fm_field "$PERSONA_FILE" model)"
 [[ -z "$MODEL" ]] && MODEL="sonnet"
+EFFORT="$(fm_field "$PERSONA_FILE" effort)"
 
 PERSONA_BODY="$(strip_frontmatter "$PERSONA_FILE")"
 SYSTEM_PROMPT="${PERSONA_BODY}
@@ -165,7 +166,7 @@ EOF
   printf '%s' "${INITIAL_TASK:-$WELCOME}" > "$TASK_FILE"
   ABS_TASK_FILE="$(to_abs "$TASK_FILE")"
 
-  LAUNCH_CMD="claude --dangerously-skip-permissions --model ${MODEL} --append-system-prompt-file $(printf '%q' "$ABS_PROMPT_FILE") \"\$(cat $(printf '%q' "$ABS_TASK_FILE"))\""
+  LAUNCH_CMD="claude --dangerously-skip-permissions --model ${MODEL} ${EFFORT:+--effort ${EFFORT}} --append-system-prompt-file $(printf '%q' "$ABS_PROMPT_FILE") \"\$(cat $(printf '%q' "$ABS_TASK_FILE"))\""
 else
   # Worker pane: start the pure-shell polling loop. worker-idle.sh resolves
   # via PATH (plugin's bin/ is on PATH).
