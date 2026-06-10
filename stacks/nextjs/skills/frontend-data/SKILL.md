@@ -5,7 +5,7 @@ description: Data fetching, caching, and mutation patterns for Next.js — Serve
 
 # Frontend Data — Next.js
 
-Patterns and bars for fetching, caching, and mutating data in this stack. Read `nextjs-core` first. When this skill and `coding-principles` (or `nextjs-core`) agree, follow them; when they diverge, this skill wins for data-fetching/mutation code.
+Fetch/cache/mutate patterns. Read `nextjs-core` first. On conflict with `coding-principles`/`nextjs-core`, this skill wins for data-fetching/mutation code.
 
 ## Versions (pinned)
 
@@ -50,12 +50,10 @@ async function UsersPage() {
 }
 ```
 
-Rules:
-
-- **Always specify caching**. `fetch` defaults change by Next version — make intent explicit.
+- **Always specify caching** — `fetch` defaults change by Next version; make intent explicit.
 - **Parallelize** independent fetches: `const [a, b] = await Promise.all([fetchA(), fetchB()]);`.
-- **Validate response shape** with `zod` at trust boundaries — AI-written code hallucinates response shapes; schema validation catches drift.
-- **No client component imports** inside the fetch path. Pure server logic.
+- **Validate response shape** with `zod` at trust boundaries — AI-written code hallucinates shapes.
+- **No client component imports** in the fetch path. Pure server logic.
 
 ## Caching and revalidation
 
@@ -65,9 +63,9 @@ Rules:
 | Periodic refresh (ISR) | `next: { revalidate: <seconds> }` |
 | Tag-based, refreshed on mutation | `next: { tags: ["..."] }` + `revalidateTag` from Server Action |
 | Always fresh | `cache: "no-store"` |
-| Authenticated user data | `cache: "no-store"` (cookies bust shared cache anyway, but be explicit) |
+| Authenticated user data | `cache: "no-store"` (be explicit) |
 
-Document the caching strategy in the Design Doc — every `fetch` cached with a non-default policy needs a one-line rationale.
+Every non-default-cached `fetch` needs a one-line rationale in the Design Doc.
 
 ## Server Actions (mutations)
 
@@ -101,17 +99,15 @@ export async function createUser(formData: FormData) {
 }
 ```
 
-Rules:
-
-- **Validate every input at the top**. Server Actions are public endpoints — treat them like API routes.
-- **Return a discriminated union** for ok/error states. The client handles both.
+- **Validate every input at the top** — Server Actions are public endpoints; treat like API routes.
+- **Return a discriminated union** for ok/error states.
 - **Revalidate explicitly** — `revalidateTag` or `revalidatePath` after a successful write.
-- **Authenticate and authorize** before mutating. authN ≠ authZ — every Server Action mutating a protected resource must verify **per-resource authorization**, not just "is the user logged in". authN-only on protected data is BLOCKING.
-- **Wrap invocations in `useTransition`** when called from interactive Client Components — keeps the UI responsive and exposes `isPending` for non-blocking pending indicators (`useFormStatus` for form submissions).
+- **Authenticate AND authorize** before mutating. authN ≠ authZ — every Server Action mutating a protected resource must verify **per-resource authorization**, not just login. authN-only on protected data is BLOCKING.
+- **Wrap in `useTransition`** when called from interactive Client Components — keeps UI responsive, exposes `isPending` (`useFormStatus` for form submissions).
 
 ## TanStack Query patterns
 
-### Query keys
+### Query keys — centralized factory, no ad-hoc string keys
 
 ```ts
 // lib/api/queries.ts
@@ -121,8 +117,6 @@ export const userKeys = {
   detail: (id: string) => [...userKeys.all, "detail", id] as const,
 };
 ```
-
-Centralized key factory. No ad-hoc string keys scattered across components.
 
 ### Query
 
@@ -159,12 +153,12 @@ Prefer `invalidateQueries` over manual `setQueryData` unless the mutation respon
 ### Forbidden
 
 - `useEffect(() => fetch(...))` — use `useQuery`.
-- Polling without `staleTime` and `refetchInterval` set deliberately. Aimless polling burns battery.
-- Conditional hooks (calling `useQuery` inside an `if`). Use the `enabled` option.
+- Polling without `staleTime` and `refetchInterval` set deliberately.
+- Conditional hooks (`useQuery` inside an `if`). Use the `enabled` option.
 
 ### SSR hydration
 
-SSR + TanStack Query: prefetch on the server, dehydrate to a serializable state, hydrate in the Client subtree. Avoids loading flash on first paint and double-fetch on mount.
+Prefetch on the server, dehydrate to serializable state, hydrate in the Client subtree. Avoids loading flash and double-fetch on mount.
 
 ```tsx
 // Server Component
@@ -175,7 +169,7 @@ return <HydrationBoundary state={dehydrate(queryClient)}><UserList filter={filte
 
 ## Loading, empty, error states — the matrix
 
-For every component that fetches or accepts async data, render explicitly:
+Every component that fetches or accepts async data must render explicitly:
 
 | State | Render |
 |---|---|
@@ -185,7 +179,7 @@ For every component that fetches or accepts async data, render explicitly:
 | `partial` (some data, some failed) | partial render + non-blocking error indicator |
 | `ready` | the data |
 
-UI Spec section in Design Doc must include this matrix per component (see `documentation-criteria` Design Doc spec).
+Design Doc UI Spec section must include this matrix per component (see `documentation-criteria` Design Doc spec).
 
 ## Authentication / authorization
 
@@ -197,7 +191,7 @@ UI Spec section in Design Doc must include this matrix per component (see `docum
 ## Error boundaries
 
 - Route-level `error.tsx` for uncaught render errors. Logs to telemetry, shows recovery UI.
-- Component-level error boundaries via `react-error-boundary` for islands that should not bring down the page.
+- Component-level boundaries via `react-error-boundary` for islands that should not bring down the page.
 - Global handler (`app/global-error.tsx`) for the worst case.
 
 ## Forms
@@ -213,10 +207,10 @@ UI Spec section in Design Doc must include this matrix per component (see `docum
 - `fetch` without explicit cache option.
 - Server Action without input validation.
 - Server Action without auth check on protected data.
-- Inline `queryKey: ["users", filter]` instead of using the key factory.
-- Loading / empty / error state missing — UI just renders nothing on non-ready states.
-- Schema-less response handling (assuming the API returned what we expect without parsing).
+- Inline `queryKey: ["users", filter]` instead of the key factory.
+- Loading / empty / error state missing — renders nothing on non-ready states.
+- Schema-less response handling (no parsing of API responses).
 
 ## When this skill conflicts with the AC
 
-A high-traffic dashboard with custom caching requirements may justify deviations. Document in Design Doc with measured numbers; otherwise follow this skill.
+A high-traffic dashboard with custom caching may justify deviations. Document in Design Doc with measured numbers; otherwise follow this skill.

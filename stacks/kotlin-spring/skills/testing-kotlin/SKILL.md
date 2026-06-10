@@ -5,32 +5,32 @@ description: Test framework and patterns for Kotlin + Spring Boot — JUnit 5, K
 
 # Testing — Kotlin + Spring Boot
 
-Stack-specific overlay on `testing-principles`. When this skill and `testing-principles` agree, follow `testing-principles`. When they diverge, this skill wins for Kotlin/Spring tests.
+Overlay on `testing-principles`; on divergence this skill wins for Kotlin/Spring tests.
 
-## Frameworks (pinned choices)
+## Frameworks (pinned)
 
-| Layer | Tool | Why |
+| Layer | Tool | Notes |
 |---|---|---|
-| Test runner | **JUnit 5** (Jupiter) | Spring's first-class support, parametrized tests, lifecycle hooks |
-| Assertion / DSL | **Kotest** (assertion module only) | richer than JUnit assertions; Kotest Spec runner is **not** used (we stay on Jupiter) |
-| Mocking | **MockK** | Kotlin-native; handles final classes, coroutines, extension functions |
-| Real DB | **Testcontainers** (Postgres, MySQL — match prod) | catches schema drift, dialect issues; required for repository tests |
-| HTTP mocking | **WireMock** | for outbound HTTP clients |
-| Property-based | **Kotest property** (where it earns its keep) | invariants and round-trip tests |
+| Runner | **JUnit 5** (Jupiter) | Kotest Spec runner **not** used — stay on Jupiter |
+| Assertion | **Kotest** (assertion module only) | richer + better failures than JUnit |
+| Mocking | **MockK** | Kotlin-native: final classes, coroutines, ext functions |
+| Real DB | **Testcontainers** (Postgres/MySQL — match prod) | required for repo tests; catches schema/dialect drift |
+| HTTP mocking | **WireMock** | outbound clients |
+| Property-based | **Kotest property** | invariants, round-trip |
 
-Mockito is forbidden in new code; existing Mockito tests are migrated when touched.
+Mockito forbidden in new code; migrate existing Mockito tests when touched.
 
-## Test types and Spring Boot test slices
+## Test types / Spring Boot slices
 
 | Type | Annotation | Speed | Use for |
 |---|---|---|---|
 | Plain unit | none | < 100 ms | pure logic, services with mocked deps |
 | `@WebMvcTest` | yes | < 500 ms | controllers + validation, no full context |
-| `@DataJpaTest` | yes (with Testcontainers) | < 1 s | repositories, query correctness, schema |
-| `@SpringBootTest` | yes (sparingly) | seconds | end-to-end wire-up sanity, full-context integration |
+| `@DataJpaTest` | yes + Testcontainers | < 1 s | repositories, query correctness, schema |
+| `@SpringBootTest` | yes (sparingly) | seconds | full-context integration, wire-up sanity |
 | Acceptance / E2E | `@SpringBootTest(webEnvironment = RANDOM_PORT)` | seconds | What-If Witch's AC tests for `/feat` |
 
-Default for service-layer tests: **plain unit + MockK**. Reach for `@SpringBootTest` only when the test genuinely needs real Spring wiring.
+Service-layer default: **plain unit + MockK**. Reach for `@SpringBootTest` only when real Spring wiring is genuinely needed.
 
 ## File structure
 
@@ -45,11 +45,11 @@ src/test/kotlin/<root-package>/
     └── TestcontainersConfig.kt
 ```
 
-Test class name mirrors production class + `Test` suffix. Acceptance tests live under `src/test/kotlin/<context>/acceptance/<feature>AcceptanceTest.kt`.
+Test class = production class + `Test`. Acceptance: `src/test/kotlin/<context>/acceptance/<feature>AcceptanceTest.kt`.
 
-## JUnit 5 patterns
+## JUnit 5
 
-### Naming
+Backtick-quoted method names for prose. Every acceptance test MUST include the `AC-NNN` ID in `@DisplayName`.
 
 ```kotlin
 @Test
@@ -60,13 +60,8 @@ fun `should return 404 when user not found`() { … }
 fun ac001_email_too_short() { … }
 ```
 
-Backtick-quoted method names for prose. `@DisplayName` for AC traceability — every acceptance test must include the `AC-NNN` ID in `@DisplayName`.
-
-### Lifecycle
-
-`@BeforeEach` for per-test setup; never `@BeforeAll` for mutable state. `@AfterEach` for cleanup — DB cleanup is handled by `@DataJpaTest` rollback or Testcontainers isolation.
-
-### Parametrized
+- Lifecycle: `@BeforeEach` per-test setup; never `@BeforeAll` for mutable state. `@AfterEach` for cleanup — DB cleanup via `@DataJpaTest` rollback or Testcontainers isolation.
+- Parametrized: `@ParameterizedTest` + `@CsvSource`; `@MethodSource` when data needs structured types.
 
 ```kotlin
 @ParameterizedTest
@@ -74,9 +69,9 @@ Backtick-quoted method names for prose. `@DisplayName` for AC traceability — e
 fun `should map letter to number`(input: String, expected: Int) { … }
 ```
 
-Use `@MethodSource` when the data needs structured types.
-
 ## Kotest assertions
+
+Prefer infix `shouldBe`/`shouldNotBe`/`shouldHaveSize` over `assertEquals` — reads and fails better.
 
 ```kotlin
 result shouldBe expected
@@ -85,25 +80,15 @@ result shouldHaveSize 3
 exception shouldBeInstanceOf <ValidationException>
 ```
 
-Prefer infix `shouldBe`/`shouldNotBe`/`shouldHaveSize` over `assertEquals` — reads better, fails better.
-
-## MockK patterns
-
-### Basic mock
+## MockK
 
 ```kotlin
 val repo = mockk<UserRepository>()
 every { repo.findById(1L) } returns user
-val service = UserService(repo)
-
-service.get(1L) shouldBe user
-
+UserService(repo).get(1L) shouldBe user
 verify(exactly = 1) { repo.findById(1L) }
-```
 
-### Coroutines
-
-```kotlin
+// coroutines
 coEvery { client.fetch(any()) } returns response
 runTest {
     service.process()
@@ -111,13 +96,13 @@ runTest {
 }
 ```
 
-### Spy / relaxed
-
-`relaxed = true` only when unmocked methods would clutter the test (prefer explicit `every`). `spyk` only for legacy code that cannot accept an injected mock.
+`relaxed = true` only when unmocked methods clutter (prefer explicit `every`). `spyk` only for legacy code that can't accept an injected mock.
 
 ## Spring Boot test slices
 
 ### `@WebMvcTest`
+
+Use `@MockkBean` (from `springmockk`) — Mockito-based `@MockBean` is forbidden.
 
 ```kotlin
 @WebMvcTest(UserController::class)
@@ -135,9 +120,9 @@ class UserControllerTest {
 }
 ```
 
-Use `@MockkBean` (from `springmockk`) — not `@MockBean`. Mockito-based `@MockBean` is forbidden.
+### `@DataJpaTest` + Testcontainers
 
-### `@DataJpaTest` with Testcontainers
+`@ServiceConnection` (Spring Boot 3.1+) wires the container URL automatically — no manual property overrides.
 
 ```kotlin
 @DataJpaTest
@@ -160,13 +145,11 @@ class UserRepositoryTest {
 }
 ```
 
-`@ServiceConnection` (Spring Boot 3.1+) wires the container's URL automatically. No manual property overrides.
-
-**Mandatory**: every `@Repository` change is tested with `@DataJpaTest` + Testcontainers. Mock-only tests for repositories are BLOCKING per `testing-principles`.
+**Mandatory**: every `@Repository` change is tested with `@DataJpaTest` + Testcontainers. Mock-only repository tests are BLOCKING per `testing-principles`.
 
 ## Test data builders
 
-Avoid 10-arg constructors. Build helpers per aggregate in `support/fixtures/`:
+Avoid 10-arg constructors — build helpers per aggregate in `support/fixtures/`:
 
 ```kotlin
 fun aUser(
@@ -186,25 +169,25 @@ Rescue trigger matches on these strings:
 - `./gradlew compileKotlin` — compile-only fast check
 - `./gradlew build` — build verification (compile + test + assemble)
 
-Iteration: `compileKotlin` + scoped `--tests`. Pre-push: `./gradlew test` once. No cascade — the full suite covers every subset.
+Iteration: `compileKotlin` + scoped `--tests`. Pre-push: `./gradlew test` once. No cascade — full suite covers every subset.
 
 ## Coverage and CI
 
 - JaCoCo configured; reports in CI artifacts.
-- Coverage gate: 80% line coverage on changed files; falling below blocks the PR.
+- Gate: 80% line coverage on changed files; below blocks the PR.
 - Coverage is a guide — don't write throwaway tests to lift the number.
 
 ## Common smells (Roastmaster blocks on)
 
-- Test asserting `expected = mockReturn` (no actual transformation verified).
-- `@SpringBootTest` used where `@WebMvcTest` or plain unit would suffice.
-- `Thread.sleep` in tests (use `Awaitility` for async waits, fixed clocks for time).
-- Tests that share mutable static state (`object`, `companion object` mutated across tests).
+- Asserting `expected = mockReturn` (no actual transformation verified).
+- `@SpringBootTest` where `@WebMvcTest` or plain unit would suffice.
+- `Thread.sleep` (use `Awaitility` for async, fixed clocks for time).
+- Shared mutable static state (`object` / `companion object` mutated across tests).
 - Repository test using H2 instead of Testcontainers when prod uses Postgres/MySQL (dialect drift).
-- Skipping (`@Disabled`) without a linked ticket.
-- Real network calls (no WireMock, no Testcontainers — actual outbound HTTP).
-- `runBlocking` instead of `runTest` for coroutine tests (loses virtual time, slower).
+- `@Disabled` without a linked ticket.
+- Real network calls (no WireMock/Testcontainers — actual outbound HTTP).
+- `runBlocking` instead of `runTest` for coroutine tests (loses virtual time).
 
 ## When this skill conflicts with the AC
 
-If an AC explicitly demands a slower test type (e.g., `@SpringBootTest` for an inherently full-stack acceptance check), follow the AC. Document in the Design Doc's verification strategy.
+If an AC demands a slower test type (e.g., `@SpringBootTest` for an inherently full-stack acceptance check), follow the AC. Document in the Design Doc's verification strategy.

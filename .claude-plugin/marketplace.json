@@ -12,7 +12,7 @@
       "name": "workflows",
       "source": "./workflows",
       "strict": true,
-      "version": "0.8.2",
+      "version": "0.8.3",
       "description": "Stack-agnostic core: 7 personas, tmux pane orchestration, ticket protocol, git flow, codex adversarial-review bridge",
       "author": {
         "name": "sideholic",
@@ -37,7 +37,7 @@
       "name": "stack-kotlin-spring",
       "source": "./stacks/kotlin-spring",
       "strict": true,
-      "version": "0.3.0",
+      "version": "0.3.1",
       "description": "Kotlin + Spring Boot stack pack — coding rules, data access patterns, testing skills, stop-verification hook",
       "author": {
         "name": "sideholic",
@@ -59,7 +59,7 @@
       "name": "stack-nextjs",
       "source": "./stacks/nextjs",
       "strict": true,
-      "version": "0.2.0",
+      "version": "0.2.1",
       "description": "Next.js stack pack — frontend coding rules, data fetching patterns, testing skills, stop-verification hook",
       "author": {
         "name": "sideholic",

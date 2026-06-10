@@ -64,13 +64,14 @@ Technoking (main 페인, Tech Lead)
     ▼ 워커 페인들이 폴링으로 ticket 픽업
 Paladin (worker-be) · Wizard (worker-fe) · Witch (worker-qa)
     ├─ 각자 별도 git worktree 에서 병렬 구현
+    ├─ 같은 에러 2 번 반복 (error_2x) → Technoking 이 codex 에 자동 위임 (rescue)
     └─ PR push 후 완료 알림
         ↓
 Roastmaster (worker-review, 코드 리뷰어)
     ├─ codex 에 어드버서리얼 리뷰를 백그라운드로 보냄
-    └─ 결과 판정: APPROVE / COMMENT / BLOCKING
+    ├─ 결과 판정: APPROVE / COMMENT / BLOCKING
+    └─ 같은 BLOCKING 이 2 라운드 반복 (pattern_stuck) → Technoking 이 codex 에 자동 위임 (rescue)
         ↓
-        └─ 같은 버그가 2 번 반복되면 codex 에 자동 위임 (rescue)
 Technoking → 머지 → 보고
 ```
 
@@ -182,7 +183,7 @@ stacks/<name>/
 | `/feat <요청>` | 전체 11 단계 (PRD → 설계 → 구현 → 리뷰 → 머지) | 신규 기능. medium·large 면 도중에 PRD/설계 확인 절차 있음 |
 | `/design <요청>` | PRD + 설계 문서 + ADR 만 만들고 구현은 안 함 | 방향 검증·이해관계자 합의 단계에서 산출물만 필요할 때 |
 | `/task <요청>` | 1–2 파일, 단일 영역의 짧은 변경 | 작은 버그 수정, 한 함수 리팩토링 |
-| `/review <PR#>` | 이미 열린 PR 에 코드 리뷰 재실행 | 수동 수정 후 재리뷰, 외부에서 들어온 PR 감사 |
+| `/review <PR#·브랜치·범위>` | 이미 열린 PR · 브랜치 · 커밋 범위에 코드 리뷰 재실행 | 수동 수정 후 재리뷰, 외부에서 들어온 PR 감사 |
 
 ### 진단·운영 (4)
 

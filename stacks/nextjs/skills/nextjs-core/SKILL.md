@@ -5,13 +5,13 @@ description: Next.js (App Router) and TypeScript conventions for frontend code i
 
 # Next.js (App Router) — Core
 
-Stack-specific overlay on `coding-principles`. Pinned to App Router (no Pages Router for new code). When this skill and `coding-principles` agree, follow `coding-principles`. When they diverge, this skill wins for Next.js/TypeScript code.
+Stack-specific overlay on `coding-principles`. App Router only (no Pages Router for new code). On agreement, follow `coding-principles`; on divergence, this skill wins for Next.js/TypeScript code.
 
 ## Version handling — detect, don't assume
 
-This skill applies to **whichever version is actually installed in the project**, not a fixed pin. The values in the reference table below were observed at skill authoring time (2026-05); the real source of truth is the project itself. Worker MUST detect first, then verify against official docs when the installed version is outside training-data confidence.
+Applies to **whichever version is actually installed**, not a fixed pin. Reference table is a 2026-05 authoring snapshot; the project is the source of truth. Detect first, then verify against official docs when the installed version is outside training-data confidence.
 
-### Reference (skill authoring snapshot, not a mandate)
+### Reference (snapshot, not a mandate)
 
 | Item | Reference | Detect from |
 |---|---|---|
@@ -21,28 +21,28 @@ This skill applies to **whichever version is actually installed in the project**
 | TypeScript | 5+ | `package.json` → `devDependencies.typescript` |
 | Package manager | pnpm 9+ | `package.json` → `packageManager` |
 
-**Project conventions (independent of version — always apply):**
+**Project conventions (version-independent — always apply):**
 
-- Language: TypeScript only — no `.js`/`.jsx` in `app/`, `components/`, `lib/`
+- TypeScript only — no `.js`/`.jsx` in `app/`, `components/`, `lib/`
 - `tsconfig`: `strict: true`, `noUncheckedIndexedAccess: true`, `noFallthroughCasesInSwitch: true`
-- Lint / format: ESLint (`next/core-web-vitals`) + Prettier; pre-commit fails on either
+- Lint/format: ESLint (`next/core-web-vitals`) + Prettier; pre-commit fails on either
 - App Router only (no Pages Router for new code)
 
 ### Protocol (BLOCKING when violated)
 
-1. **Detect** the installed Next.js / React major.minor from `package.json` at the start of work. Record in design notes or PR description.
-2. **Compare to training cutoff**. Evergreen content in this skill (App Router architecture, Server vs Client boundary, `_components/` privacy, a11y bar, `useTransition` for Server Actions, fetch caching primitives — *as concepts*) applies broadly.
-3. **If the installed version is newer than your confident training** OR you are about to use a specific feature, config key, default behavior, or import path you are not 100% sure remains stable in that version: **MUST verify via official docs before writing code**.
-   - Next.js: https://nextjs.org/docs (use WebFetch tool for the specific page)
+1. **Detect** installed Next.js/React major.minor from `package.json` at start of work. Record in design notes or PR description.
+2. **Compare to training cutoff**. Evergreen concepts here (App Router architecture, Server vs Client boundary, `_components/` privacy, a11y bar, `useTransition` for Server Actions, fetch caching primitives) apply broadly.
+3. **If installed version is newer than your confident training** OR you use a specific feature/config key/default/import path you're not 100% sure is stable in that version: **MUST verify via official docs before writing code**.
+   - Next.js: https://nextjs.org/docs (WebFetch the specific page)
    - React: https://react.dev
-   - TanStack Query / Vitest / MSW: their respective official sites
-4. **Particularly version-volatile** (always re-verify): `fetch` cache defaults, `next.config.{js,ts}` schema, Server Action signature, `<Image>` / `next/font` props, route segment config (`export const dynamic`, `revalidate`, `runtime`).
-5. **Never invent** feature names, config keys, default values from training data. When uncertain, WebFetch → read → code. If WebFetch fails or docs are ambiguous, escalate via `inbox/` rather than guess.
-6. **Record verification** in PR description: e.g., `Verified against Next.js 16.2 § Data Fetching (2026-05-11)`. Roastmaster & codex use this to scope their review.
+   - TanStack Query / Vitest / MSW: their official sites
+4. **Always re-verify (version-volatile)**: `fetch` cache defaults, `next.config.{js,ts}` schema, Server Action signature, `<Image>` / `next/font` props, route segment config (`export const dynamic`, `revalidate`, `runtime`).
+5. **Never invent** feature names, config keys, defaults from training. When uncertain: WebFetch → read → code. If WebFetch fails or docs are ambiguous, escalate via `inbox/` rather than guess.
+6. **Record verification** in PR description, e.g. `Verified against Next.js 16.2 § Data Fetching (2026-05-11)`. Roastmaster & codex use this to scope review.
 
 ## Canonical commands
 
-Rescue trigger matches on these strings (the `error_signature` calculation in `adversarial-review-bridge` depends on these commands' error output format):
+Rescue trigger matches on these strings (the `error_signature` calculation in `adversarial-review-bridge` depends on their error output format):
 
 - `pnpm build` — Next build + type check
 - `pnpm lint`
@@ -77,13 +77,13 @@ lib/                              # framework-free helpers
 types/                            # shared TS types (rarely; prefer co-location)
 ```
 
-Route-private components go in `_components/` (Next ignores underscore-prefixed dirs for routing). Cross-route reuse → `components/`.
+Route-private components → `_components/` (Next ignores underscore-prefixed dirs for routing). Cross-route reuse → `components/`.
 
 ### Sub-folder guidance inside a feature directory
 
-`components/ui/` (shadcn primitives) — **keep flat as an explicit exception**: shadcn CLI generates files directly under this path and does not support sub-folder targeting. Up to ~30 primitives stays readable. If/when shadcn supports sub-folder generation (or you stop using its CLI), fall back to the same semantic-role split rule used for feature directories (`forms/`, `overlay/`, `display/`, `layout/`).
+`components/ui/` (shadcn primitives) — **keep flat as an explicit exception**: shadcn CLI generates directly under this path and can't target sub-folders. Up to ~30 primitives stays readable. If shadcn gains sub-folder generation (or you drop its CLI), fall back to the semantic-role split below.
 
-`components/<feature>/` (feature-specific shared) — **flat up to ~4 files, then split by semantic role**. When a feature directory grows past 4–5 components, group them by what they *do*, not by what they *are*:
+`components/<feature>/` (feature-specific shared) — **flat up to ~4 files, then split by semantic role** (what they *do*, not what they *are*):
 
 ```
 components/shell/
@@ -92,44 +92,36 @@ components/shell/
 └── header/ (or topbar/) # top bars, breadcrumbs, theme toggles, user menus
 ```
 
-Common axes that work: `layout/`, `nav/`, `header/`, `form/`, `data/`, `feedback/`. Don't over-engineer — a 3-file feature stays flat. The split is triggered by the gut feeling "I can't find anything in here anymore," not by a strict count.
-
-`components/<feature>/` may also nest one more level for sub-features (`shell/nav/sidebar-section/`), but stop there — three levels of nesting hides files.
+Common axes: `layout/`, `nav/`, `header/`, `form/`, `data/`, `feedback/`. Don't over-engineer — a 3-file feature stays flat. Trigger is "I can't find anything in here anymore," not a strict count. May nest one more level for sub-features (`shell/nav/sidebar-section/`), but stop at three levels — deeper hides files.
 
 ## Server vs Client Components
 
-### Default: Server Component
+**Default: Server Component.** Every component is a Server Component unless it opts out with `"use client"`.
 
-- Every component is a Server Component unless it explicitly opts out with `"use client"`.
-- Server Components: data fetching, secrets access, large dependency rendering.
-- Client Components: interactivity (event handlers, state, effects), browser-only APIs.
+- Server: data fetching, secrets access, large-dependency rendering.
+- Client: interactivity (event handlers, state, effects), browser-only APIs.
 
-### `"use client"` placement
+**`"use client"` placement** — push the boundary as **deep** as possible. A whole-page `"use client"` defeats the architecture. Pattern: server `page.tsx` composes static content + a small client island for interactive parts.
 
-- Push the boundary as **deep** as possible. A whole page declared `"use client"` defeats the architecture.
-- Pattern: server `page.tsx` → server component composes static content + a small client island for interactive parts.
-
-### Forbidden in Server Components
-
-`useState`, `useEffect`, `useReducer`, browser globals (`window`, `localStorage`), event handlers (`onClick`, `onChange`). If you need any of these, extract a client component for that part only.
+**Forbidden in Server Components**: `useState`, `useEffect`, `useReducer`, browser globals (`window`, `localStorage`), event handlers (`onClick`, `onChange`). Need any → extract a client component for that part only.
 
 ## Data fetching (high level)
 
-Detailed patterns in `frontend-data` skill. Summary here:
+Detailed patterns in `frontend-data` skill. Summary:
 
-- Server Components: `fetch` directly, with Next's caching primitives (`{ cache, next: { revalidate, tags } }`).
+- Server Components: `fetch` directly with Next's caching primitives (`{ cache, next: { revalidate, tags } }`).
 - Client Components: TanStack Query (default; SWR if pinned project-wide). No raw `useEffect` for data fetching.
 - Mutations: Server Actions (`"use server"`) for typed RPC; Route Handlers when an external HTTP API is needed.
 
-**authN ≠ authZ**: every Server Action that mutates protected resources must check **per-resource authorization**, not only authentication. authN-only Server Action on protected data is BLOCKING.
+**authN ≠ authZ**: every Server Action mutating protected resources must check **per-resource authorization**, not only authentication. authN-only Server Action on protected data is BLOCKING.
 
 **useTransition**: wrap Server Action invocations from interactive Client Components in `useTransition` to prevent UI freeze; surface in-flight state via `isPending`.
 
 ## Routing patterns
 
 - Dynamic segments: `[slug]`, `[...slug]`, `[[...slug]]` (optional catch-all). Prefer named over catch-all.
-- Parallel routes (`@modal`): for slot-based composition (modals, side panels).
-- Intercepting routes (`(.)`, `(..)`, `(...)`): for in-place modal patterns. Use sparingly — they confuse new contributors.
+- Parallel routes (`@modal`): slot-based composition (modals, side panels).
+- Intercepting routes (`(.)`, `(..)`, `(...)`): in-place modal patterns. Use sparingly — confuse new contributors.
 - Route Groups `(name)`: organize without affecting URL.
 
 ## Styling
@@ -137,29 +129,26 @@ Detailed patterns in `frontend-data` skill. Summary here:
 - Tailwind CSS, configured per project.
 - CSS Modules acceptable for genuinely-isolated component styles.
 - No global CSS beyond `globals.css` (resets, fonts, theme variables).
-- No styled-components / Emotion — these conflict with Server Components.
+- No styled-components / Emotion — conflict with Server Components.
 
 ## Components — quality bars
 
-### Naming
-
-- PascalCase component names. File names match the default export (`UserCard.tsx` exports `UserCard`).
+**Naming**
+- PascalCase component names. File matches default export (`UserCard.tsx` exports `UserCard`).
 - Hooks: `useThing` — file `useThing.ts`.
 - Utility modules: kebab-case files, named exports (`format-date.ts` exports `formatDate`).
 
-### Props
-
+**Props**
 - Explicit props interface on every component:
   ```tsx
   type Props = { user: User; onEdit?: (id: string) => void };
   export function UserCard({ user, onEdit }: Props) { … }
   ```
-- No `React.FC<Props>` — it brings legacy `children` typing baggage.
+- No `React.FC<Props>` — brings legacy `children` typing baggage.
 - Boolean props default false. Don't add a prop just because.
 
-### Accessibility (a11y)
-
-- Every interactive element is reachable by keyboard.
+**Accessibility (a11y)**
+- Every interactive element reachable by keyboard.
 - Every form input has a label (visible or `aria-label`).
 - Every image has `alt` (empty string if decorative).
 - Focus management on route changes and modal open/close.
@@ -173,7 +162,7 @@ Pixel Wizard owns a11y; Roastmaster BLOCKS on missing `alt`, unreachable control
 - Font: `next/font`. No `<link>` to Google Fonts.
 - Code splitting: dynamic `import()` for heavy components only loaded after interaction.
 - Avoid waterfalls: kick off independent fetches in parallel via `Promise.all` in Server Components.
-- Streaming: wrap independent async Server Components in `<Suspense fallback={...}>`. Default-await behavior blocks the whole page until every fetch resolves.
+- Streaming: wrap independent async Server Components in `<Suspense fallback={...}>`. Default-await blocks the whole page until every fetch resolves.
 
 ## Caching invariants
 
@@ -190,15 +179,15 @@ Pixel Wizard owns a11y; Roastmaster BLOCKS on missing `alt`, unreachable control
 
 - Server-only secrets: `MY_SECRET=...` — never accessed in client components.
 - Public: `NEXT_PUBLIC_THING=...` — bundled into client.
-- Validate at startup with `zod` (or equivalent). A missing or malformed env var should fail boot, not surface as a runtime error.
+- Validate at startup with `zod` (or equivalent). Missing/malformed env var should fail boot, not surface as a runtime error.
 
 ## TypeScript rules
 
 - `strict: true`. Period.
 - No `any`. Use `unknown` and narrow.
-- No `// @ts-ignore` — use `// @ts-expect-error <reason>` when the suppression is intentional and short-lived.
+- No `// @ts-ignore` — use `// @ts-expect-error <reason>` when suppression is intentional and short-lived.
 - Discriminated unions for state machines (`{ status: "loading" } | { status: "ready"; data: ... } | { status: "error"; error: Error }`).
-- Inferred return types for functions are fine, but **export interfaces** for public APIs (libraries, shared modules).
+- Inferred return types are fine, but **export interfaces** for public APIs (libraries, shared modules).
 
 ## Common smells (Roastmaster blocks on)
 
@@ -208,9 +197,9 @@ Pixel Wizard owns a11y; Roastmaster BLOCKS on missing `alt`, unreachable control
 - Missing `alt` on image, missing label on input.
 - Raw `<img>` tag in product UI.
 - `any` introduced as escape hatch.
-- Cross-feature import going through `../../../`. Use absolute imports or restructure.
+- Cross-feature import through `../../../`. Use absolute imports or restructure.
 - Router state (`useRouter`, `usePathname`) used in a Server Component.
 
 ## When this skill conflicts with the AC
 
-If an AC requires a deviation (legacy Pages Router maintenance, third-party widget that requires global CSS), document in Design Doc and Pixel Wizard signs off. Otherwise follow this skill.
+If an AC requires a deviation (legacy Pages Router maintenance, third-party widget requiring global CSS), document in Design Doc and Pixel Wizard signs off. Otherwise follow this skill.

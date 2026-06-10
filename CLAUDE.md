@@ -4,7 +4,7 @@
 
 ## 7명의 팀
 
-| # | 이름 | 직책 | 모델 | 페인 |ㄱ
+| # | 이름 | 직책 | 모델 | 페인 |
 |---|---|---|---|---|
 | 1 | **Technoking** | Tech Lead — 라이프사이클 마스터, ticket 분배, rescue 디스패치 | **opus** | `main` |
 | 2 | **Spec Shaman** | Product Owner — PRD 작성 (사용자 산출물, 한국어) | sonnet | subagent |
@@ -45,6 +45,7 @@ backlog/              ← OUT-OF-SCOPE (BL-NNNN-*.md)
 handoff/              ← /handoff 직렬화
 archive/{YYYY-MM}/    ← /cleanup 또는 자동 트리거 이동
 workers/registry.json ← pane↔persona↔PID + counters
+.runtime/             ← 데몬 PID·로그, wake.log, <pane>.complete sentinel, <slug>.prompt/.task, verifier 덤프 (gitignored)
 config.yml            ← /setup-team 출력 (codex verified_at 등)
 ```
 
@@ -67,7 +68,7 @@ config.yml            ← /setup-team 출력 (codex verified_at 등)
 
 | 카테고리 | 커맨드 |
 |---|---|
-| 라이프사이클 | `/feat` (전체 11단계), `/design` (PRD·Design 만), `/task` (small 3-step), `/review` (PR 재리뷰) |
+| 라이프사이클 | `/feat` (전체 11단계), `/design` (PRD·Design 만), `/task` (small 3-step), `/review` (PR·브랜치 재리뷰) |
 | 진단·운영 | `/diagnose` (조사·제안), `/setup-team` (셋업), `/status` (보드), `/abort` (취소) |
 | 직렬화·확장 | `/handoff` (컨텍스트 직렬화), `/hire` (페르소나 추가), `/show-team` (로스터), `/cleanup` (archive) |
 

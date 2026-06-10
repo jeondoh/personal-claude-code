@@ -5,7 +5,7 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 
 # Ticket Protocol
 
-`.claude-team/` (gitignored) is the project's transient workflow state — markdown files with YAML frontmatter, the only handoff medium between panes. `docs/*` holds user artifacts (see `documentation-criteria`); `.claude-team/*` holds inter-persona coordination.
+`.claude-team/` (gitignored) = transient workflow state, the only handoff medium between panes (markdown + YAML frontmatter). `docs/*` holds user artifacts (see `documentation-criteria`).
 
 ## Directory layout
 
@@ -13,7 +13,7 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 .claude-team/
 ├── tickets/
 │   ├── queue/         # published, unclaimed
-│   ├── in-progress/   # claimed and being worked (also holds in_review status)
+│   ├── in-progress/   # claimed; also holds in_review status
 │   ├── done/          # merged (permanently retained — no archive, no delete)
 │   └── cancelled/     # cancelled before merge (auto-archive 7d)
 ├── reviews/           # Roastmaster review reports (RR-T-*.md, archive 30d after merge)
@@ -24,6 +24,7 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 ├── archive/{YYYY-MM}/ # /cleanup destination
 ├── workers/
 │   └── registry.json  # pane ↔ persona ↔ PID + counters
+├── .runtime/          # daemon PIDs/logs, wake.log, <pane>.complete sentinels, <slug>.prompt/.task, verifier dumps (gitignored)
 └── config.yml         # /setup-team output (codex verified_at, etc.)
 ```
 
@@ -39,7 +40,7 @@ description: Schema, lifecycle, naming, and state transitions for every artifact
 | `HANDOFF-` | Handoff serialization | timestamp-based | `HANDOFF-20260511T143000+0900` |
 | `INBOX-` | Inbox message | timestamp + pane | `INBOX-20260511T143015+0900-worker-be` |
 
-Numeric counters are **4-digit zero-padded** (`T-0001`); auto-extends to 5 digits past `9999`. Filename: `<ID>-<kebab-slug>.md`, slug ≤ 4 words from title. `RR-T-NNNN-N` does not consume a counter — `N` is the review round (1, 2, 3).
+Numeric counters: **4-digit zero-padded** (`T-0001`), auto-extend to 5 digits past `9999`. Filename `<ID>-<kebab-slug>.md`, slug ≤ 4 words from title. `RR-T-NNNN-N` consumes no counter — `N` is review round (1, 2, 3).
 
 ## Frontmatter — common fields (every type; type-specific fields layer on top)
 
@@ -86,13 +87,12 @@ author: technoking
 ---
 ```
 
-`attempt_count`, `last_error_signature`, `last_update_at` are **worker-managed** (Technoking writes none at dispatch). On claim: `attempt_count: 1` + `last_update_at: <now>`. After every build/test failure: overwrite `last_error_signature` + bump `last_update_at` (see `agents/persistence-paladin.md § Workflow step 4`, `agents/pixel-wizard.md § Workflow step 6`). Computed signature == existing field → branch to `error_2x` path immediately.
-
-`protected_files` is **Technoking-set at dispatch** for assets that must remain pristine (contract snapshots, production yaml, lockfiles, vendored code, third-party fixtures). Worker MUST NOT edit them; fix-required → `status: escalation_needed` (no self-edit). Watchdog also diffs the worktree and fires verification on any protected-file hit. Globs are worktree-root relative.
+- `attempt_count` / `last_error_signature` / `last_update_at` are **worker-managed** (Technoking writes none at dispatch). On claim: `attempt_count: 1` + `last_update_at: <now>`. After every build/test failure: overwrite `last_error_signature` + bump `last_update_at` (see `agents/persistence-paladin.md § Workflow step 4`, `agents/pixel-wizard.md § Workflow step 6`). Computed signature == existing → branch to `error_2x` immediately.
+- `protected_files` is **Technoking-set at dispatch** for assets that must stay pristine (contract snapshots, production yaml, lockfiles, vendored code, fixtures). Worker MUST NOT edit; fix-required → `status: escalation_needed` (no self-edit). Watchdog diffs the worktree and fires verification on any hit. Globs are worktree-root relative.
 
 ### 2. Review report (`type: review-report`)
 
-Filename `RR-T-NNNN-<n>.md` (`<n>` = review round); immutable once written; multiple rounds → multiple files. `pattern_stuck: true` triggers auto-rescue (see `adversarial-review-bridge`).
+Filename `RR-T-NNNN-<n>.md` (`<n>` = round); immutable once written; multiple rounds → multiple files. `pattern_stuck: true` triggers auto-rescue (see `adversarial-review-bridge`).
 
 ```yaml
 ---
@@ -128,7 +128,7 @@ updated: 2026-05-11T17:30:00+09:00
 
 ### 4. Review ticket (`type: review`, id `RV-NNNN`)
 
-Two sub-cases share the `RV-NNNN` counter; schema fields distinguish them.
+Two sub-cases share the `RV-NNNN` counter; fields distinguish them.
 
 #### 4a. General PR review (workflow step 9)
 
@@ -193,7 +193,7 @@ created: 2026-05-11T14:35:00+09:00
 - `fix_pushed` — worker → Technoking BLOCKING fix pushed (payload: `branch`, `last_sha`); Technoking issues round+1 `RV-NNNN`.
 - `needs_reblock` — worker → Technoking COMMENT finding escalated to BLOCKING; reason attached.
 - `pattern_question` — watchdog → Technoking ambiguous loop/stagnation; **does not auto-kill the worker** — routes to user-decision via Technoking (payload: `pane`, `ticket`, `signals`, `verifier_verdict: ambiguous`, `recommended_action: kill_and_rescue|wait_one_cycle|user_decide`, `evidence_dump_path: .claude-team/.runtime/verifier-<ts>.log`). Technoking presents signals + recommendation via `AskUserQuestion`; never act on a single signal alone.
-- `error_2x` — worker self-escalation OR watchdog surrogate after **verifier confirms** confirmed_loop pattern (payload: `error_signature`, `attempt_count`, `failing_test_or_file`, `source: worker|watchdog-surrogate`, optional `verifier_verdict: confirmed_loop`). Triggers `/codex:rescue` per `adversarial-review-bridge §Rescue dispatch pipeline`.
+- `error_2x` — worker self-escalation OR watchdog surrogate after **verifier confirms** confirmed_loop (payload: `error_signature`, `attempt_count`, `failing_test_or_file`, `source: worker|watchdog-surrogate`, optional `verifier_verdict: confirmed_loop`). Triggers `/codex:rescue` per `adversarial-review-bridge §Rescue dispatch pipeline`.
 - `escalation_needed` — worker self-escalation OR watchdog surrogate after **verifier confirms** stagnation/timeout (payload: `reason`, optional `verifier_verdict: stagnation`). Technoking handles per `agents/technoking.md §Escalation Coordination`.
 
 ### 6. Backlog (`type: backlog`)
@@ -238,10 +238,10 @@ queued → in_progress → in_review → done
                 ↘  rescue_candidate → in_progress (after rescue patch)
                 ↘  cancelled (any time)
 ```
-- `queued → in_progress`: worker moves file from `tickets/queue/` to `tickets/in-progress/` and creates `.worktrees/T-NNNN/`.
-- `in_progress → rescue_candidate`: worker hits auto-rescue trigger (same error twice, time limit, or attempt limit). Worker sets status, posts inbox `kind: error_2x`, stops work. File stays in `tickets/in-progress/`.
+- `queued → in_progress`: worker `mv`s file `tickets/queue/` → `tickets/in-progress/`, creates `.worktrees/T-NNNN/`.
+- `in_progress → rescue_candidate`: auto-rescue trigger (same error twice, time limit, or attempt limit) → set status, post inbox `kind: error_2x`, stop. File stays in `tickets/in-progress/`.
 - `rescue_candidate → in_progress`: Technoking dispatches rescue patch as `RV-NNNN` validation ticket. Worker resumes on rescue branch.
-- `in_progress → in_review`: worker pushes branch and posts inbox `kind: completion`. Technoking opens PR. **File stays in `tickets/in-progress/`; only the `status` field flips.** No separate `in-review/` directory.
+- `in_progress → in_review`: worker pushes branch + posts inbox `kind: completion`. Technoking opens PR. **File stays in `tickets/in-progress/`; only `status` flips.** No separate `in-review/` directory.
 - `in_review → done`: PR merged. File moves to `tickets/done/`. Worktree removed.
 - `* → cancelled`: explicit `/abort` or scope reset.
 
@@ -259,30 +259,28 @@ open → promoted (T-NNNN ticket created, BL moved to archive/)  OR  closed (won
 
 ## Rescue validation cycle
 
-codex 가 만들어준 rescue 패치를 검증하는 `RV-NNNN` ticket (sub-case 4b) 처리 절차.
+codex rescue 패치를 검증하는 `RV-NNNN` ticket (sub-case 4b) 절차.
 
-**트리거**: Technoking 이 `/codex:rescue` 결과 받은 직후 `RV-NNNN-<slug>.md` 발행 (type: review, sub-case 4b, priority: top, header field `rescue_branch: rescue/T-{NNNN}` 포함). 자세한 디스패치 흐름은 `adversarial-review-bridge § Rescue dispatch pipeline`.
+**트리거**: Technoking 이 `/codex:rescue` 결과 직후 `RV-NNNN-<slug>.md` 발행 (type: review, sub-case 4b, priority: top, `rescue_branch: rescue/T-{NNNN}`). 디스패치 흐름 → `adversarial-review-bridge § Rescue dispatch pipeline`.
 
-**워커 처리 절차**:
-
-1. ticket header 에 `rescue_branch` 필드가 있으면 RV 검증 모드로 진입 (sub-case 4b).
-2. `git checkout rescue/T-{NNNN}` 으로 codex 패치 브랜치로 전환.
-3. 워커별 quality verification 실행 (build / test / typecheck / lint / a11y) — 페르소나 `§ Workflow` 의 표준 verification 단계와 동일.
+**워커 절차**:
+1. header 에 `rescue_branch` 있으면 RV 검증 모드 (sub-case 4b).
+2. `git checkout rescue/T-{NNNN}`.
+3. 워커별 quality verification (build / test / typecheck / lint / a11y) — 페르소나 `§ Workflow` 표준 단계와 동일.
 4. PASS → ticket `done`, `RESCUE-*` `status: resolved`, 머지 게이트 (Roastmaster 재리뷰) 진입.
-5. FAIL → inbox `kind: escalation_needed, reason: rescue_failed` 알림 + 사용자 에스컬레이션. **추가 코드 수정 시도 금지** — rescue 패치를 워커가 보수하지 않는다.
+5. FAIL → inbox `kind: escalation_needed, reason: rescue_failed` + 사용자 에스컬레이션. **추가 코드 수정 금지.**
 
 **불변 규칙**:
-
-- RV-NNNN (sub-case 4b) 처리 중에는 코드 변경 금지 — codex 패치 그대로 검증만.
-- `rescue_branch` 필드가 없는 RV-NNNN 은 일반 PR review round (sub-case 4a) — 검증 사이클 아님.
-- Rescue 재시도 없음. FAIL 후 동일 ticket·동일 `error_signature` 로 재디스패치 X (`adversarial-review-bridge § Validation failure — never re-rescue`).
+- RV-NNNN (4b) 처리 중 코드 변경 금지 — codex 패치 그대로 검증만.
+- `rescue_branch` 없는 RV-NNNN 은 일반 PR review round (4a) — 검증 사이클 아님.
+- Rescue 재시도 없음. FAIL 후 동일 ticket·동일 `error_signature` 재디스패치 X (`adversarial-review-bridge § Validation failure — never re-rescue`).
 
 ## File operations
 
-- **Dispatch deps**: Technoking checks `depends_on` before dispatching; unresolved-dep tickets stay in `tickets/queue/` and are reconsidered each poll. Workers don't check `depends_on` — if it's in their queue, it's ready.
+- **Dispatch deps**: Technoking checks `depends_on` before dispatching; unresolved-dep tickets stay in `tickets/queue/`, reconsidered each poll. Workers don't check `depends_on` — if it's in their queue, it's ready.
 - **Atomicity**: claiming = `mv` file + create worktree + edit frontmatter (`status`, `assignee`, `updated`) in one shell sequence (`mv`, not `git mv` — `.claude-team/` is gitignored). Orphans surfaced by `/cleanup`.
 - **Updating**: every state change bumps `updated`. Read full file → modify → write whole file atomically. No in-place sed substitution.
-- **Archive**: `/cleanup` archives `cancelled` (>7d), `rescues` (>30d), `reviews` (>30d post-merge) into `archive/{YYYY-MM}/`. **`done` tickets are permanently retained in `tickets/done/` — never archived or deleted, regardless of age** (record asset). Archived files retain original IDs/contents — read-only.
+- **Archive**: `/cleanup` archives `cancelled` (>7d), `rescues` (>30d), `reviews` (>30d post-merge) into `archive/{YYYY-MM}/`. **`done` tickets are permanently retained — never archived or deleted, regardless of age.** Archived files retain original IDs/contents — read-only.
 - **Concurrency**: multiple workers may sit in `tickets/in-progress/` (different IDs) but cannot touch overlapping `files_in_scope` — Technoking's step-6 decomposition prevents overlap; if unavoidable, sequence via `depends_on`.
 
 ## Registry — `workers/registry.json`
@@ -299,8 +297,8 @@ codex 가 만들어준 rescue 패치를 검증하는 `RV-NNNN` ticket (sub-case 
 }
 ```
 
-- **Keys are pane names** (`worker-be`, `worker-fe`, `worker-qa`, `worker-review`) — stable across persona renames. `main` (Technoking) is **not** tracked — the user's primary pane is implicit.
-- `pid` = **tmux pane PID** (pane's first process, usually the shell that forked `claude`); tracks pane liveness, not claude's process directly. `pane_id` (e.g. `claude-team:team.2`) is the tmux target for `send-keys`/`select-pane`.
-- Counter increment: read → +1 → write, encapsulated by `ticket-publish.sh`. `RR-`, `RESCUE-`, `HANDOFF-`, `INBOX-` prefixes do not consume counters.
+- **Keys are pane names** (`worker-be`, etc.) — stable across persona renames. `main` (Technoking) is **not** tracked.
+- `pid` = **tmux pane PID** (pane's first process, usually the shell that forked `claude`); tracks pane liveness, not claude directly. `pane_id` (e.g. `claude-team:team.2`) is the tmux target for `send-keys`/`select-pane`.
+- Counter increment: read → +1 → write, via `ticket-publish.sh`. `RR-`, `RESCUE-`, `HANDOFF-`, `INBOX-` consume no counters.
 
 **Cross-skill**: branch naming → `git-flow`; inbox polling, directive delivery, headless `claude` dispatch → `tmux-worker-protocol`; rescue triggers and validation flow → `adversarial-review-bridge`; 11-step lifecycle → `orchestration-guide`.

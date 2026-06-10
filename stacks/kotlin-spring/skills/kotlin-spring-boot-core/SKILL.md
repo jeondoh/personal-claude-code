@@ -7,13 +7,13 @@ description: Kotlin idioms and Spring Boot conventions for backend code in this 
 
 Stack overlay on `coding-principles`. On conflict, this skill wins for Kotlin/Spring code.
 
-**The bar, in one line:** rich domain · thin controllers · narrow exceptions · declarative cross-cutting.
+**The bar:** rich domain · thin controllers · narrow exceptions · declarative cross-cutting.
 
 Every rule is **BLOCKING** unless tagged `(SHOULD)`. Roastmaster auto-rejects PRs violating a BLOCKING rule.
 
 ## Version handling — detect, don't assume
 
-Snapshot below was observed at authoring time (2026-05). Source of truth is `build.gradle.kts`.
+Snapshot observed at authoring time (2026-05). Source of truth is `build.gradle.kts`.
 
 | Item | Snapshot | Detect from |
 |---|---|---|
@@ -24,7 +24,7 @@ Snapshot below was observed at authoring time (2026-05). Source of truth is `bui
 
 ### Protocol
 
-1. **Detect** Boot / Kotlin / JDK from `build.gradle.kts` at start of work. Record in design notes or PR description.
+1. **Detect** Boot / Kotlin / JDK from `build.gradle.kts` at start of work; record in design notes or PR description.
 2. **Verify before writing** when (a) installed version is newer than confident training, or (b) adding a starter coordinate, choosing a config key, using a Spring Framework API, or relying on auto-configuration. WebFetch:
    - https://docs.spring.io/spring-boot/reference/ · https://docs.spring.io/spring-framework/reference/ · https://kotlinlang.org/docs/
 3. **Volatile across majors** (always re-verify): starter artifact names, `spring.*` keys, auto-config toggles, Kotlin compiler args. **Boot 4+** is Jakarta-only — `javax.*` forbidden; do not trust Boot 3 knowledge against Boot 4 code.
@@ -37,15 +37,16 @@ Snapshot below was observed at authoring time (2026-05). Source of truth is `bui
 freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
 ```
 
-`-Xjsr305=strict` → strict external-nullability annotations. `-Xannotation-default-target=param-property` → Kotlin 2.2 default for constructor-param annotations (resolves param-vs-property on JPA/validation). For Kotlin ≥ 2.3 verify whether the second flag is now default-on and obsolete.
+- `-Xjsr305=strict` → strict external-nullability annotations.
+- `-Xannotation-default-target=param-property` → Kotlin 2.2 default for constructor-param annotations (resolves param-vs-property on JPA/validation). For Kotlin ≥ 2.3 verify whether it's now default-on and obsolete.
 
 ### JPA + `allOpen`
 
-`kotlin("plugin.jpa")` auto-applies `allOpen` for `jakarta.persistence.{Entity, MappedSuperclass, Embeddable}` and synthesizes the no-arg constructor. **Do not** add `open` manually. **Do not** write a no-arg constructor manually. **`data class` for JPA entity is forbidden** — auto `equals`/`hashCode` walks lazy proxies → OOM. Plain `class`; `equals`/`hashCode` on surrogate ID only. (Reinforced by `data-access`.)
+`kotlin("plugin.jpa")` auto-applies `allOpen` for `jakarta.persistence.{Entity, MappedSuperclass, Embeddable}` and synthesizes the no-arg constructor. **Do not** add `open` or a no-arg constructor manually. **`data class` for JPA entity is forbidden** — auto `equals`/`hashCode` walks lazy proxies → OOM. Plain `class`; `equals`/`hashCode` on surrogate ID only. (Reinforced by `data-access`.)
 
 ## Architecture — Clean Architecture (simple)
 
-Four layers; dependencies point inward toward `domain`. No hexagonal Ports/Adapters, no Interactor classes. Boring on purpose.
+Four layers; dependencies point inward toward `domain`. No hexagonal Ports/Adapters, no Interactor classes.
 
 ```
 api  →  application  →  domain  ←  infrastructure
@@ -120,7 +121,7 @@ Five DTO families. Do not collapse them.
 | service → controller (read) | View / Result | `<Noun>View` or `<Verb><Noun>Result` | `application/` |
 | controller → HTTP | Response | `<Noun>Response` | `api/` |
 
-1. **≥ 3 parameters on a public method (controller / service / repo interface) → introduce a Command/Query.** Two related primitives that always travel together (`email + password`) → group at count 2. Anti-patterns: `fun register(email, password, displayName, locale, marketingOptIn)`, `fun search(name?, status?, from?, to?, page, size)` — both unnamed Commands/Queries.
+1. **≥ 3 parameters on a public method (controller / service / repo interface) → introduce a Command/Query.** Two related primitives that always travel together (`email + password`) → group at count 2. Anti-patterns: `fun register(email, password, displayName, locale, marketingOptIn)`, `fun search(name?, status?, from?, to?, page, size)`.
 2. **No `@Entity` on the HTTP wire.** Controllers neither accept nor return an entity; map at the api↔application boundary. `fun update(user: User)` on a controller is mass-assignment.
 3. **CQS.** A Command returns `Unit` or the new aggregate's id. A Query is `readOnly = true` and returns a View. A method that mutates *and* returns a rich view — split it.
 4. **DTOs are `data class`, immutable, framework-free** apart from Bean Validation on the Request. No JPA on Commands/Queries/Views.
@@ -229,7 +230,7 @@ Anything that applies to "many methods regardless of business meaning" is declar
 2. **No manual audit `log.info(...)` inside service bodies.** Use `@Audited("order.confirm")` + an `@Aspect`. Operational `info` (milestones) is fine.
 3. **No try-catch-then-Micrometer-increment.** Use `@Counted(value = "...", recordFailuresOnly = true)` or wrap in an aspect.
 4. **No `SecurityContextHolder.getContext().authentication` inside business logic.** Read actor at the application boundary and pass `Actor` as a typed parameter (or onto the Command).
-5. **AOP advice contains no business rules.** Authorization aspect = "is this caller allowed at all"; business rule = "is this state transition legal" — the latter belongs on the entity.
+5. **AOP advice contains no business rules.** Authorization aspect = "is this caller allowed at all"; business rule = "is this state transition legal" (belongs on the entity).
 
 ```kotlin
 // infrastructure/audit/Audited.kt — annotation only (@Aspect @Around impl elided).
@@ -300,7 +301,7 @@ annotation class Audited(val action: String)
 - `@RestController` for JSON. `@Controller` for server-rendered pages (rare).
 - **Controller Bar (enforceable)** — Controllers stay **thin**. Body of any `@RestController` method does **exactly 5 things, in order**:
   1. Receive HTTP-level inputs (`@RequestBody`/`@RequestParam`/`@RequestHeader`/`HttpServletRequest`).
-  2. Pack them into a single `Command`/`Query` via a trivial `from(...)` factory (no branching inside the factory other than nullable defaults).
+  2. Pack them into a single `Command`/`Query` via a trivial `from(...)` factory (no branching beyond nullable defaults).
   3. Call **one** application-service method.
   4. Map the returned `View`/`Result` to a `Response` via a trivial `toResponse()` mapper.
   5. Return `ResponseEntity` (or throw — `@RestControllerAdvice` handles it).
@@ -312,7 +313,7 @@ annotation class Audited(val action: String)
   - Cross-cutting concerns: `requestId`/UUID generation, MDC mutation, audit-log persistence, progress logging (`logger.info("step N …")` × N). Single entry/exit log only via interceptor/AOP.
   - **Private helper methods** in the controller class, except a `companion object` Request/Response factory when absolutely necessary. Move helpers to `application/` parsers/mappers.
   - Direct repository / JPA / `ObjectMapper` access.
-  - More than **one** collaborator injected per controller method's call path — a controller routes to a single application boundary (Facade or service method), not orchestrates 3–5 collaborators.
+  - More than **one** collaborator injected per controller method's call path — route to a single application boundary (Facade or service method), don't orchestrate 3–5 collaborators.
 
   Numeric guideline (Roastmaster threshold): controller method body ≤ **8 lines** excluding blank lines and the signature. Controller class total ≤ **40 lines** for a single endpoint pair. Beyond either → extract to application Facade.
 - Validation: `@Valid` + `jakarta.validation` on Request.
